@@ -311,7 +311,7 @@ def start_crawl():
     t.start()
     st.rerun()
 
-col_act1, col_act2, col_act3 = st.columns([1, 1, 1])
+col_act1, col_act2, col_act3, col_act4 = st.columns([1, 1, 1, 1])
 
 with col_act1:
     if not st.session_state.is_running:
@@ -348,6 +348,12 @@ with col_act3:
             st.session_state.engine.is_paused = False
         st.session_state.is_running = False
         st.session_state.is_paused = False
+        st.rerun()
+
+with col_act4:
+    if st.button("🗑️ Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
+        clear_database()
+        st.session_state.selected_usernames.clear()
         st.rerun()
 
 st.markdown("---")

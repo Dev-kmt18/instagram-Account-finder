@@ -181,9 +181,28 @@ class InstagramAgentEngine:
                 follower_count = prof.followers
                 following_count = prof.followees
         except Exception as e:
-            # Safe fallback: classify username directly if profile query has temporary glitch
-            full_name = node_username
-            bio = ""
+            # Resilient Fallback: Query Web REST API directly
+            try:
+                import requests
+                s = requests.Session()
+                s.headers.update({
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "X-IG-App-ID": "936619743392459"
+                })
+                res = s.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={node_username}", timeout=8)
+                if res.status_code == 200:
+                    u = res.json().get("data", {}).get("user", {})
+                    full_name = u.get("full_name", "") or ""
+                    bio = u.get("biography", "") or ""
+                    is_private = u.get("is_private", False)
+                    follower_count = u.get("edge_followed_by", {}).get("count", 0)
+                    following_count = u.get("edge_follow", {}).get("count", 0)
+                else:
+                    full_name = node_username
+                    bio = ""
+            except Exception:
+                full_name = node_username
+                bio = ""
 
         category, matched_kw, reason, match_score = evaluate_account(node_username, full_name, bio, keywords)
         
