@@ -57,26 +57,32 @@ class InstagramAgentEngine:
         if self.sessionid and len(self.sessionid.strip()) > 5:
             try:
                 self.log("Setting up sessionid cookie authentication...")
-                clean_sid = self.sessionid.strip()
+                from urllib.parse import unquote
+                clean_sid = unquote(self.sessionid.strip())
                 user_id_part = clean_sid.split("%3A")[0].split(":")[0]
                 
-                L.context._session.cookies.set("sessionid", clean_sid, domain=".instagram.com")
-                if user_id_part:
-                    L.context._session.cookies.set("ds_user_id", user_id_part, domain=".instagram.com")
+                for domain in [".instagram.com", "www.instagram.com", "instagram.com"]:
+                    L.context._session.cookies.set("sessionid", clean_sid, domain=domain)
+                    if user_id_part and user_id_part.isdigit():
+                        L.context._session.cookies.set("ds_user_id", user_id_part, domain=domain)
 
                 logged_user = L.test_login()
                 if logged_user:
                     self.username = logged_user
                     session_filename = f"session-{logged_user}"
                     L.save_session_to_file(session_filename)
-                    self.log(f"🎉 Login Successful! Logged in as @{logged_user}")
+                    self.log(f"🎉 Login Successful! Authenticated as @{logged_user}")
                     self.client = L
                     self.backend = "instaloader"
                     return True
+                else:
+                    self.log("❌ Provided Session ID cookie is invalid or expired.")
+                    return False
             except Exception as e:
-                self.log(f"Cookie Auth error: {e}")
+                self.log(f"❌ Cookie Auth Error: {e}. Please copy a fresh sessionid from your browser.")
+                return False
 
-        # 2. Check for saved native session file (if sessionid cookie wasn't provided)
+        # 2. Check for saved native session file (only if username provided without password)
         if self.username and not self.password:
             session_filename = f"session-{self.username}"
             if os.path.exists(session_filename):
@@ -88,8 +94,8 @@ class InstagramAgentEngine:
                         self.client = L
                         self.backend = "instaloader"
                         return True
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.log(f"Failed to load session for @{self.username}: {e}")
 
         # 3. Password Login (Fresh login when password provided)
         if self.username and self.password:
@@ -103,20 +109,8 @@ class InstagramAgentEngine:
                 self.backend = "instaloader"
                 return True
             except Exception as e:
-                self.log(f"Login error: {e}")
-                # Fallback to saved session if available
-                session_filename = f"session-{self.username}"
-                if os.path.exists(session_filename):
-                    try:
-                        L.load_session_from_file(self.username, session_filename)
-                        logged_user = L.test_login()
-                        if logged_user:
-                            self.log(f"Restored saved session for @{logged_user}!")
-                            self.client = L
-                            self.backend = "instaloader"
-                            return True
-                    except Exception:
-                        pass
+                self.log(f"❌ Password Login error for @{self.username}: {e}")
+                return False
 
         return False
 
