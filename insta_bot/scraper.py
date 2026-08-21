@@ -58,11 +58,14 @@ class InstagramAgentEngine:
             try:
                 self.log("Setting up sessionid cookie authentication...")
                 from urllib.parse import unquote
-                clean_sid = unquote(self.sessionid.strip())
-                user_id_part = clean_sid.split("%3A")[0].split(":")[0]
+                raw_sid = self.sessionid.strip().strip('"').strip("'")
+                clean_sid = unquote(raw_sid)
+                user_id_part = raw_sid.split("%3A")[0].split(":")[0]
                 
                 for domain in [".instagram.com", "www.instagram.com", "instagram.com"]:
+                    L.context._session.cookies.set("sessionid", raw_sid, domain=domain)
                     L.context._session.cookies.set("sessionid", clean_sid, domain=domain)
+                    L.context._session.cookies.set("csrftoken", "dummy_csrf_token", domain=domain)
                     if user_id_part and user_id_part.isdigit():
                         L.context._session.cookies.set("ds_user_id", user_id_part, domain=domain)
 
@@ -79,7 +82,7 @@ class InstagramAgentEngine:
                     self.log("❌ Provided Session ID cookie is invalid or expired.")
                     return False
             except Exception as e:
-                self.log(f"❌ Cookie Auth Error: {e}. Please copy a fresh sessionid from your browser.")
+                self.log(f"❌ Cookie Auth Error: {e}")
                 return False
 
         # 2. Check for saved native session file (only if username provided without password)

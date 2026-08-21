@@ -294,7 +294,8 @@ def start_crawl():
 
     # Authenticate
     if not engine.login():
-        st.error("Failed to authenticate with Instagram. Check credentials or cookie!")
+        last_err = engine.logs[-1] if engine.logs else "Check credentials or cookie!"
+        st.error(f"Authentication Failed: {last_err}")
         return
 
     def run_thread():
