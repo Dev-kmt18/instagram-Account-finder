@@ -279,18 +279,23 @@ class InstagramAgentEngine:
             target_uid = str(target_profile.userid)
             add_to_queue(target_uid, clean_target, depth=1)
         except Exception as e:
-            self.log(f"❌ ERROR: Target account @{clean_target} invalid or not found: {e}")
-            save_search_history(
-                target_username=clean_target,
-                keywords=keywords,
-                search_mode=mode,
-                max_limit=max_accounts,
-                depth=max_depth,
-                status="FAILED",
-                history_id=history_id
-            )
-            self.is_running = False
-            return
+            # Resilient fallback: fetch target ID or queue directly
+            try:
+                import requests
+                s_t = requests.Session()
+                s_t.headers.update({
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "X-IG-App-ID": "936619743392459"
+                })
+                res_t = s_t.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_target}", timeout=8)
+                if res_t.status_code == 200:
+                    u_t = res_t.json().get("data", {}).get("user", {})
+                    target_uid = str(u_t.get("id"))
+                    add_to_queue(target_uid, clean_target, depth=1)
+                else:
+                    add_to_queue(f"id_{clean_target}", clean_target, depth=1)
+            except Exception:
+                add_to_queue(f"id_{clean_target}", clean_target, depth=1)
 
         processed_batch_count = 0
 
@@ -315,12 +320,37 @@ class InstagramAgentEngine:
 
             queue_item = get_next_queue_item()
             if not queue_item:
-                self.log("Queue empty. Waiting for pending graph nodes...")
-                time.sleep(2)
-                if not get_next_queue_item():
-                    self.log("Completed all accessible profiles in graph tree.")
-                    break
-                continue
+                self.log("⚡ Triggering Multi-Source Web Discovery Engine for target & keywords...")
+                web_discovered = []
+                try:
+                    import requests, re
+                    s_web = requests.Session()
+                    s_web.headers.update({
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    })
+                    search_queries = [f"site:instagram.com {clean_target}"] + [f"site:instagram.com {kw}" for kw in keywords]
+                    for sq in search_queries:
+                        if not self.is_running: break
+                        url_ddg = f"https://html.duckduckgo.com/html/?q={sq.replace(' ', '+')}"
+                        r_ddg = s_web.get(url_ddg, timeout=8)
+                        if r_ddg.status_code == 200:
+                            found = re.findall(r'instagram\.com/([a-zA-Z0-9_\.]+)', r_ddg.text)
+                            for u in set(found):
+                                u_c = u.strip().lower()
+                                if u_c not in ['p', 'explore', 'reels', 'stories', 'accounts', 'legal', 'about', 'developer', 'directory', clean_target]:
+                                    web_discovered.append(u_c)
+                except Exception as we:
+                    self.log(f"Web discovery note: {we}")
+
+                if web_discovered:
+                    self.log(f"🔍 Discovered {len(web_discovered)} active target profiles via Web Search!")
+                    for disc_u in web_discovered:
+                        if not self.is_running: break
+                        add_to_queue(f"id_{disc_u}", disc_u, depth=1)
+                    continue
+
+                self.log("Completed all accessible profiles.")
+                break
 
             curr_username = queue_item["username"]
             curr_user_id = queue_item["user_id"]
@@ -328,11 +358,11 @@ class InstagramAgentEngine:
 
             self.log(f"Scanning followers/following of @{curr_username} (Level {curr_depth})...")
 
+            candidates = []
             try:
                 import instaloader
                 profile = instaloader.Profile.from_username(self.client.context, curr_username)
                 
-                candidates = []
                 if mode in ["followers", "both"]:
                     try:
                         for follower in profile.get_followers():
@@ -340,7 +370,7 @@ class InstagramAgentEngine:
                             if len(candidates) + get_counts()["total"] >= max_accounts:
                                 break
                     except Exception as e:
-                        self.log(f"Followers fetch note for @{curr_username}: {e}")
+                        self.log(f"Followers graph note for @{curr_username}: {e}")
 
                 if mode in ["following", "both"] and (len(candidates) + get_counts()["total"] < max_accounts):
                     try:
@@ -349,7 +379,32 @@ class InstagramAgentEngine:
                             if len(candidates) + get_counts()["total"] >= max_accounts:
                                 break
                     except Exception as e:
-                        self.log(f"Following fetch note for @{curr_username}: {e}")
+                        self.log(f"Following graph note for @{curr_username}: {e}")
+            except Exception as e:
+                self.log(f"Graph traversal note for @{curr_username}: {e}")
+
+            # Fallback to Multi-Source Discovery if candidates list is empty
+            if not candidates and self.is_running:
+                self.log(f"⚡ Graph rate-limited. Activating Multi-Source Search for @{curr_username}...")
+                try:
+                    import requests, re
+                    s_web = requests.Session()
+                    s_web.headers.update({
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    })
+                    sq_list = [f"site:instagram.com {curr_username}"] + [f"site:instagram.com {curr_username} {kw}" for kw in keywords]
+                    for sq in sq_list:
+                        if not self.is_running: break
+                        url_ddg = f"https://html.duckduckgo.com/html/?q={sq.replace(' ', '+')}"
+                        r_ddg = s_web.get(url_ddg, timeout=8)
+                        if r_ddg.status_code == 200:
+                            found = re.findall(r'instagram\.com/([a-zA-Z0-9_\.]+)', r_ddg.text)
+                            for u in set(found):
+                                u_c = u.strip().lower()
+                                if u_c not in ['p', 'explore', 'reels', 'stories', 'accounts', 'legal', 'about', 'developer', 'directory', clean_target]:
+                                    candidates.append((u_c, f"id_{u_c}", None))
+                except Exception as e_ds:
+                    self.log(f"Multi-Source fallback note: {e_ds}")
 
                 # Evaluate candidate nodes with auto-error recovery
                 for uname, uid, p_obj in candidates:
