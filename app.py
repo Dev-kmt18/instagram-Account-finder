@@ -23,63 +23,56 @@ st.set_page_config(
 # Initialize Database
 init_db()
 
-# Custom Styling (Dark SaaS Theme)
+# Custom Styling (Pure Deep Matte Black Theme - No Blue/Shiny Tint)
 st.markdown("""
 <style>
-    /* Dark SaaS Color Palette */
+    /* Pure Matte Deep Black Color Palette */
     :root {
-        --bg-main: #0f172a;
-        --card-bg: #1e293b;
-        --border-color: #334155;
-        --text-main: #f8fafc;
-        --text-muted: #94a3b8;
+        --bg-main: #000000;
+        --card-bg: #111111;
+        --border-color: #222222;
+        --text-main: #ffffff;
+        --text-muted: #888888;
         --accent: #6366f1;
         --accent-hover: #4f46e5;
     }
     
-    .stApp {
-        background-color: var(--bg-main);
-        color: var(--text-main);
+    body, .stApp {
+        background-color: var(--bg-main) !important;
+        color: var(--text-main) !important;
     }
     
     /* Header */
     .app-header {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
     }
     .app-title {
-        font-size: 1.75rem;
+        font-size: 1.6rem;
         font-weight: 700;
         color: var(--text-main);
         letter-spacing: -0.02em;
     }
     .app-subtitle {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         color: var(--text-muted);
-        margin-top: 0.25rem;
+        margin-top: 0.2rem;
     }
     
-    /* Configuration Cards */
-    .config-box {
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-    }
+    /* Config Labels */
     .config-header {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--accent);
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.5rem;
     }
     
     /* Status Badges */
     .badge {
         display: inline-block;
         padding: 3px 8px;
-        border-radius: 6px;
+        border-radius: 4px;
         font-size: 0.75rem;
         font-weight: 600;
     }
@@ -102,26 +95,17 @@ st.markdown("""
     /* Keyword Chips */
     .chip-tag {
         display: inline-block;
-        background-color: #334155;
-        color: #e2e8f0;
+        background-color: #222222;
+        color: #e0e0e0;
         padding: 3px 10px;
         border-radius: 12px;
         font-size: 0.8rem;
-        margin-right: 6px;
-        margin-bottom: 6px;
-        border: 1px solid #475569;
+        margin-right: 5px;
+        margin-bottom: 5px;
+        border: 1px solid #333333;
     }
     
-    /* Account Card List */
-    .account-card-container {
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    /* Hide Default Streamlit Sidebar Navigation elements */
+    /* Hide Default Streamlit Sidebar */
     [data-testid="stSidebar"] {
         display: none;
     }
@@ -151,61 +135,69 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. TOP HORIZONTAL CONFIGURATION SECTION
+# 2. TOP HORIZONTAL CONFIGURATION SECTION (CLEAN ALIGNED GRID)
 # ---------------------------------------------------------
 with st.container():
-    col_cfg1, col_cfg2, col_cfg3 = st.columns([1.1, 1.3, 1.2])
+    # Row 1: Titles
+    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.4])
+    r1_c1.markdown('<div class="config-header">1. Login Method</div>', unsafe_allow_html=True)
+    r1_c2.markdown('<div class="config-header">2. Target Account</div>', unsafe_allow_html=True)
+    r1_c3.markdown('<div class="config-header">3. Search Parameters</div>', unsafe_allow_html=True)
+    r1_c4.markdown('<div class="config-header">4. Speed & Delays</div>', unsafe_allow_html=True)
+    r1_c5.markdown('<div class="config-header">5. Keywords</div>', unsafe_allow_html=True)
 
-    # Card 1: Login Method
-    with col_cfg1:
-        st.markdown('<div class="config-header">1. Login Method</div>', unsafe_allow_html=True)
+    # Row 2: Inputs perfectly aligned on one horizontal line
+    r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.4])
+
+    with r2_c1:
         login_method = st.radio(
             "Login Mode", 
             ["Session ID", "OTP / Login"], 
             horizontal=True, 
             label_visibility="collapsed"
         )
-        
-        sessionid_val = ""
-        ig_username = ""
-        ig_password = ""
-
         if login_method == "Session ID":
             sessionid_val = st.text_input(
-                "Session ID Cookie", 
+                "Session ID", 
                 type="password", 
-                placeholder="Paste Instagram sessionid...", 
-                help="Value of 'sessionid' cookie from Developer Tools"
+                placeholder="Paste SessionID cookie...", 
+                label_visibility="collapsed"
             )
+            ig_username, ig_password = "", ""
         else:
-            c_u1, c_u2 = st.columns(2)
-            with c_u1:
-                ig_username = st.text_input("Username", placeholder="Username...")
-            with c_u2:
-                ig_password = st.text_input("Password", type="password", placeholder="Password...")
+            sessionid_val = ""
+            u_col1, u_col2 = st.columns(2)
+            with u_col1:
+                ig_username = st.text_input("Username", placeholder="User...", label_visibility="collapsed")
+            with u_col2:
+                ig_password = st.text_input("Password", type="password", placeholder="Pass...", label_visibility="collapsed")
 
-    # Card 2: Target & Search Settings
-    with col_cfg2:
-        st.markdown('<div class="config-header">2. Target & Search Settings</div>', unsafe_allow_html=True)
-        c_t1, c_t2 = st.columns([1.2, 1])
-        with c_t1:
-            target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or fitness_guru")
-        with c_t2:
-            search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0)
-            
-        c_p1, c_p2 = st.columns(2)
-        with c_p1:
-            max_limit = st.number_input("Account Check Limit", min_value=10, max_value=10000, value=1000, step=50)
-        with c_p2:
-            crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1)
+    with r2_c2:
+        target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed")
+        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed")
 
-    # Card 3: Keywords
-    with col_cfg3:
-        st.markdown('<div class="config-header">3. Target Keywords</div>', unsafe_allow_html=True)
-        
+    with r2_c3:
+        max_limit = st.number_input("Check Limit", min_value=10, max_value=10000, value=1000, step=50, label_visibility="collapsed")
+        crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed")
+
+    with r2_c4:
+        speed_option = st.selectbox(
+            "Processing Speed / Delay",
+            ["Fast ⚡ (1.0 - 2.5s)", "Standard ⚖️ (2.0 - 4.0s)", "Safe 🛡️ (4.0 - 8.0s)"],
+            index=0,
+            label_visibility="collapsed"
+        )
+        if "Fast" in speed_option:
+            min_delay_val, max_delay_val = 1.0, 2.5
+        elif "Standard" in speed_option:
+            min_delay_val, max_delay_val = 2.0, 4.0
+        else:
+            min_delay_val, max_delay_val = 4.0, 8.0
+
+    with r2_c5:
         c_kw_in, c_kw_btn = st.columns([3, 1])
         with c_kw_in:
-            new_kw = st.text_input("Add Keyword", placeholder="Type & press enter...", label_visibility="collapsed")
+            new_kw = st.text_input("Add Keyword", placeholder="Add & Enter...", label_visibility="collapsed")
             if new_kw and new_kw.strip():
                 clean_k = new_kw.strip().lower()
                 if clean_k not in st.session_state.kw_list:
@@ -219,9 +211,7 @@ with st.container():
         # Render chips
         if st.session_state.kw_list:
             chips_markup = "".join([f'<span class="chip-tag">{k}</span>' for k in st.session_state.kw_list])
-            st.markdown(f'<div style="margin-top:0.4rem;">{chips_markup}</div>', unsafe_allow_html=True)
-        else:
-            st.caption("No keywords added yet. Add at least 1 keyword.")
+            st.markdown(f'<div style="margin-top:0.3rem;">{chips_markup}</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -262,8 +252,8 @@ def start_crawl():
             max_accounts=max_limit,
             mode=search_mode,
             max_depth=crawl_depth,
-            min_delay=MIN_DELAY_PER_PROFILE,
-            max_delay=MAX_DELAY_PER_PROFILE
+            min_delay=min_delay_val,
+            max_delay=max_delay_val
         )
         st.session_state.is_running = False
 
@@ -299,15 +289,15 @@ m5.metric("Private Profiles", counts["private"])
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 5. FILTERS TOOLBAR
+# 5. FILTERS TOOLBAR (ALIGNED ON SAME HORIZONTAL LINE)
 # ---------------------------------------------------------
 st.markdown("##### Filters")
-f_col1, f_col2, f_col3 = st.columns([1.5, 1, 1])
+f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
 
 with f_col1:
     search_query = st.text_input("Search Filter", placeholder="Search by username, name, bio, or keyword...", label_visibility="collapsed")
 with f_col2:
-    min_match_score = st.number_input("Minimum Match Score (%)", min_value=0, max_value=100, value=20, step=5)
+    min_match_score = st.number_input("Minimum Match Score (%)", min_value=0, max_value=100, value=20, step=5, label_visibility="collapsed")
 with f_col3:
     category_filter_sel = st.selectbox("Category Filter", ["All Categories", "Qualified", "Needs Review", "Unqualified"], index=0, label_visibility="collapsed")
 
@@ -336,7 +326,6 @@ def show_account_details_dialog(acc):
     st.markdown(f"### @{acc['username']}")
     st.write(f"**Full Name:** {acc['full_name'] or 'N/A'}")
     
-    # Category badge
     cat = acc['category']
     if cat == "QUALIFIED":
         st.markdown("**Status:** <span class='badge badge-qualified'>Qualified</span>", unsafe_allow_html=True)
@@ -349,7 +338,6 @@ def show_account_details_dialog(acc):
     st.write(f"**Match Score:** {score_val:.0f}%")
     st.write(f"**Matched Keywords:** {acc['matched_keywords'] or 'None'}")
     
-    # Calculate match location breakdown
     locations = []
     bio_t = (acc['bio'] or '').lower()
     uname_t = (acc['username'] or '').lower()
@@ -409,7 +397,7 @@ def confirm_batch_delete_dialog(usernames):
             st.rerun()
 
 # ---------------------------------------------------------
-# 7. RESULTS LIST UI
+# 7. RESULTS LIST UI (UNIQUE KEY SPECIFIED PER TAB TO PREVENT StreamlitDuplicateElementId)
 # ---------------------------------------------------------
 tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "All Results",
@@ -419,7 +407,7 @@ tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "Live Logs"
 ])
 
-def render_account_list(accounts_list):
+def render_account_list(accounts_list, tab_key="all"):
     if not accounts_list:
         st.info("No accounts matching the filter criteria.")
         return
@@ -428,7 +416,7 @@ def render_account_list(accounts_list):
     b_col1, b_col2 = st.columns([3, 1])
     with b_col2:
         num_sel = len(st.session_state.selected_usernames)
-        if st.button(f"Delete Selected ({num_sel})", disabled=num_sel == 0, use_container_width=True):
+        if st.button(f"Delete Selected ({num_sel})", disabled=num_sel == 0, key=f"btn_del_sel_{tab_key}", use_container_width=True):
             confirm_batch_delete_dialog(list(st.session_state.selected_usernames))
 
     for acc in accounts_list:
@@ -448,7 +436,7 @@ def render_account_list(accounts_list):
             
             with c_check:
                 is_selected = acc['username'] in st.session_state.selected_usernames
-                chk = st.checkbox("", value=is_selected, key=f"chk_{acc['username']}", label_visibility="collapsed")
+                chk = st.checkbox("", value=is_selected, key=f"chk_{tab_key}_{acc['username']}", label_visibility="collapsed")
                 if chk:
                     st.session_state.selected_usernames.add(acc['username'])
                 else:
@@ -467,26 +455,26 @@ def render_account_list(accounts_list):
             with c_actions:
                 ac1, ac2 = st.columns(2)
                 with ac1:
-                    if st.button("Details", key=f"det_{acc['username']}", use_container_width=True):
+                    if st.button("Details", key=f"det_{tab_key}_{acc['username']}", use_container_width=True):
                         show_account_details_dialog(acc)
                 with ac2:
-                    if st.button("Delete", key=f"del_{acc['username']}", use_container_width=True):
+                    if st.button("Delete", key=f"del_{tab_key}_{acc['username']}", use_container_width=True):
                         confirm_single_delete_dialog(acc['username'])
 
 with tab_all:
-    render_account_list(filtered_accounts)
+    render_account_list(filtered_accounts, tab_key="all")
 
 with tab_qual:
     qual_accs = [a for a in filtered_accounts if a["category"] == "QUALIFIED"]
-    render_account_list(qual_accs)
+    render_account_list(qual_accs, tab_key="qual")
 
 with tab_review:
     review_accs = [a for a in filtered_accounts if a["category"] == "DOUBTFUL"]
-    render_account_list(review_accs)
+    render_account_list(review_accs, tab_key="review")
 
 with tab_unqual:
     unqual_accs = [a for a in filtered_accounts if a["category"] == "UNQUALIFIED"]
-    render_account_list(unqual_accs)
+    render_account_list(unqual_accs, tab_key="unqual")
 
 with tab_logs:
     st.markdown("##### Live Activity Logs")
