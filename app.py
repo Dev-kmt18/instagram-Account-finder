@@ -164,25 +164,18 @@ inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 # ---------------------------------------------------------
 status_badge_html = ""
 if st.session_state.is_running and not st.session_state.is_paused:
-    status_badge_html = """
-    <div style="float: right;" class="running-cyclist">
-        <span class="cyclist-icon">🚴💨</span> Agent Active & Scanning...
-    </div>
-    """
+    status_badge_html = '<span class="running-cyclist"><span class="cyclist-icon">🚴💨</span> Agent Active & Scanning...</span>'
 elif st.session_state.is_running and st.session_state.is_paused:
-    status_badge_html = """
-    <div style="float: right;" class="paused-badge">
-        ⏸ Agent Paused (Editing Allowed)
-    </div>
-    """
+    status_badge_html = '<span class="paused-badge">⏸ Agent Paused (Editing Allowed)</span>'
 
-st.markdown(f"""
-<div class="app-header">
-    {status_badge_html}
-    <div class="app-title">Instagram Lead Finder & Classifier</div>
-    <div class="app-subtitle">Extract followers or following, evaluate bio metadata, and classify prospects into targeted sales leads.</div>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    f'<div class="app-header">'
+    f'<div style="float: right;">{status_badge_html}</div>'
+    f'<div class="app-title">Instagram Lead Finder & Classifier</div>'
+    f'<div class="app-subtitle">Extract followers or following, evaluate bio metadata, and classify prospects into targeted sales leads.</div>'
+    f'</div>',
+    unsafe_allow_html=True
+)
 
 # ---------------------------------------------------------
 # 2. TOP HORIZONTAL CONFIGURATION SECTION (CLEAN ALIGNED GRID)
@@ -382,7 +375,7 @@ f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
 with f_col1:
     search_query = st.text_input("Search Filter", placeholder="Search by username, name, bio, or keyword...", label_visibility="collapsed")
 with f_col2:
-    min_match_score = st.number_input("Minimum Match Score (%)", min_value=0, max_value=100, value=20, step=5, label_visibility="collapsed")
+    min_match_score = st.number_input("Minimum Match Score (%)", min_value=0, max_value=100, value=0, step=5, label_visibility="collapsed")
 with f_col3:
     category_filter_sel = st.selectbox("Category Filter", ["All Categories", "Qualified", "Needs Review", "Unqualified"], index=0, label_visibility="collapsed")
 
