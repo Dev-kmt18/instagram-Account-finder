@@ -53,6 +53,12 @@ class InstagramAgentEngine:
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
 
+        # Inject essential Web App Header
+        L.context._session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "X-IG-App-ID": "936619743392459"
+        })
+
         # 1. Login via Session Cookie (100% Reliable & Resilient)
         if self.sessionid and len(self.sessionid.strip()) > 5:
             try:
@@ -69,21 +75,27 @@ class InstagramAgentEngine:
                 # Resilient Auth Verification
                 is_authed = False
                 logged_user = None
+                
+                # Test 1: Direct Web API verification with X-IG-App-ID
                 try:
-                    logged_user = L.test_login()
-                    if logged_user:
+                    res = L.context._session.get(
+                        "https://www.instagram.com/api/v1/users/web_profile_info/?username=instagram", 
+                        headers={"X-IG-App-ID": "936619743392459"},
+                        timeout=10
+                    )
+                    if res.status_code == 200:
                         is_authed = True
-                except Exception as e:
-                    self.log(f"Note: GraphQL test_login rate-limited, verifying cookie directly...")
+                except Exception as api_e:
+                    self.log(f"Note: Web API check ({api_e}), testing GraphQL...")
 
+                # Test 2: Fallback test_login
                 if not is_authed:
                     try:
-                        # Fallback verification by fetching profile with session cookie
-                        test_prof = instaloader.Profile.from_username(L.context, "instagram")
-                        if test_prof and test_prof.username == "instagram":
+                        logged_user = L.test_login()
+                        if logged_user:
                             is_authed = True
-                    except Exception as ve:
-                        self.log(f"Profile verification failed: {ve}")
+                    except Exception as e:
+                        self.log(f"Note: GraphQL test_login ({e})")
 
                 if is_authed:
                     if logged_user:
