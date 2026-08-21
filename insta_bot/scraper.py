@@ -358,53 +358,54 @@ class InstagramAgentEngine:
 
             self.log(f"Scanning followers/following of @{curr_username} (Level {curr_depth})...")
 
-            candidates = []
             try:
-                import instaloader
-                profile = instaloader.Profile.from_username(self.client.context, curr_username)
-                
-                if mode in ["followers", "both"]:
-                    try:
-                        for follower in profile.get_followers():
-                            candidates.append((follower.username, str(follower.userid), follower))
-                            if len(candidates) + get_counts()["total"] >= max_accounts:
-                                break
-                    except Exception as e:
-                        self.log(f"Followers graph note for @{curr_username}: {e}")
-
-                if mode in ["following", "both"] and (len(candidates) + get_counts()["total"] < max_accounts):
-                    try:
-                        for followee in profile.get_followees():
-                            candidates.append((followee.username, str(followee.userid), followee))
-                            if len(candidates) + get_counts()["total"] >= max_accounts:
-                                break
-                    except Exception as e:
-                        self.log(f"Following graph note for @{curr_username}: {e}")
-            except Exception as e:
-                self.log(f"Graph traversal note for @{curr_username}: {e}")
-
-            # Fallback to Multi-Source Discovery if candidates list is empty
-            if not candidates and self.is_running:
-                self.log(f"⚡ Graph rate-limited. Activating Multi-Source Search for @{curr_username}...")
+                candidates = []
                 try:
-                    import requests, re
-                    s_web = requests.Session()
-                    s_web.headers.update({
-                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    })
-                    sq_list = [f"site:instagram.com {curr_username}"] + [f"site:instagram.com {curr_username} {kw}" for kw in keywords]
-                    for sq in sq_list:
-                        if not self.is_running: break
-                        url_ddg = f"https://html.duckduckgo.com/html/?q={sq.replace(' ', '+')}"
-                        r_ddg = s_web.get(url_ddg, timeout=8)
-                        if r_ddg.status_code == 200:
-                            found = re.findall(r'instagram\.com/([a-zA-Z0-9_\.]+)', r_ddg.text)
-                            for u in set(found):
-                                u_c = u.strip().lower()
-                                if u_c not in ['p', 'explore', 'reels', 'stories', 'accounts', 'legal', 'about', 'developer', 'directory', clean_target]:
-                                    candidates.append((u_c, f"id_{u_c}", None))
-                except Exception as e_ds:
-                    self.log(f"Multi-Source fallback note: {e_ds}")
+                    import instaloader
+                    profile = instaloader.Profile.from_username(self.client.context, curr_username)
+                    
+                    if mode in ["followers", "both"]:
+                        try:
+                            for follower in profile.get_followers():
+                                candidates.append((follower.username, str(follower.userid), follower))
+                                if len(candidates) + get_counts()["total"] >= max_accounts:
+                                    break
+                        except Exception as e:
+                            self.log(f"Followers graph note for @{curr_username}: {e}")
+
+                    if mode in ["following", "both"] and (len(candidates) + get_counts()["total"] < max_accounts):
+                        try:
+                            for followee in profile.get_followees():
+                                candidates.append((followee.username, str(followee.userid), followee))
+                                if len(candidates) + get_counts()["total"] >= max_accounts:
+                                    break
+                        except Exception as e:
+                            self.log(f"Following graph note for @{curr_username}: {e}")
+                except Exception as e:
+                    self.log(f"Graph traversal note for @{curr_username}: {e}")
+
+                # Fallback to Multi-Source Discovery if candidates list is empty
+                if not candidates and self.is_running:
+                    self.log(f"⚡ Graph rate-limited. Activating Multi-Source Search for @{curr_username}...")
+                    try:
+                        import requests, re
+                        s_web = requests.Session()
+                        s_web.headers.update({
+                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        })
+                        sq_list = [f"site:instagram.com {curr_username}"] + [f"site:instagram.com {curr_username} {kw}" for kw in keywords]
+                        for sq in sq_list:
+                            if not self.is_running: break
+                            url_ddg = f"https://html.duckduckgo.com/html/?q={sq.replace(' ', '+')}"
+                            r_ddg = s_web.get(url_ddg, timeout=8)
+                            if r_ddg.status_code == 200:
+                                found = re.findall(r'instagram\.com/([a-zA-Z0-9_\.]+)', r_ddg.text)
+                                for u in set(found):
+                                    u_c = u.strip().lower()
+                                    if u_c not in ['p', 'explore', 'reels', 'stories', 'accounts', 'legal', 'about', 'developer', 'directory', clean_target]:
+                                        candidates.append((u_c, f"id_{u_c}", None))
+                    except Exception as e_ds:
+                        self.log(f"Multi-Source fallback note: {e_ds}")
 
                 # Evaluate candidate nodes with auto-error recovery
                 for uname, uid, p_obj in candidates:
@@ -441,7 +442,6 @@ class InstagramAgentEngine:
                         continue
 
                 mark_queue_status(curr_user_id, "COMPLETED")
-
             except Exception as e:
                 self.log(f"Skipping node @{curr_username}: {e}")
                 mark_queue_status(curr_user_id, "FAILED")
