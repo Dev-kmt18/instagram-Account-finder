@@ -76,8 +76,8 @@ class InstagramAgentEngine:
             except Exception as e:
                 self.log(f"Cookie Auth error: {e}")
 
-        # 2. Check for saved native session file
-        if self.username:
+        # 2. Check for saved native session file (if sessionid cookie wasn't provided)
+        if self.username and not self.password:
             session_filename = f"session-{self.username}"
             if os.path.exists(session_filename):
                 try:
@@ -91,18 +91,32 @@ class InstagramAgentEngine:
                 except Exception:
                     pass
 
-        # 3. Password Login
+        # 3. Password Login (Fresh login when password provided)
         if self.username and self.password:
             try:
+                self.log(f"Logging in with credentials for @{self.username}...")
                 L.login(self.username, self.password)
                 session_filename = f"session-{self.username}"
                 L.save_session_to_file(session_filename)
-                self.log(f"Logged in successfully as @{self.username}!")
+                self.log(f"🎉 Logged in successfully as @{self.username}!")
                 self.client = L
                 self.backend = "instaloader"
                 return True
             except Exception as e:
                 self.log(f"Login error: {e}")
+                # Fallback to saved session if available
+                session_filename = f"session-{self.username}"
+                if os.path.exists(session_filename):
+                    try:
+                        L.load_session_from_file(self.username, session_filename)
+                        logged_user = L.test_login()
+                        if logged_user:
+                            self.log(f"Restored saved session for @{logged_user}!")
+                            self.client = L
+                            self.backend = "instaloader"
+                            return True
+                    except Exception:
+                        pass
 
         return False
 

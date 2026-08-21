@@ -105,6 +105,36 @@ st.markdown("""
         border: 1px solid #333333;
     }
     
+    /* Running Cyclist Animation */
+    @keyframes cycleAnim {
+        0% { transform: translateX(0px); }
+        50% { transform: translateX(8px); }
+        100% { transform: translateX(0px); }
+    }
+    .cyclist-icon {
+        display: inline-block;
+        font-size: 1.2rem;
+        animation: cycleAnim 0.7s infinite ease-in-out;
+    }
+    .running-cyclist {
+        background: rgba(99, 102, 241, 0.15);
+        color: #818cf8;
+        border: 1px solid rgba(99, 102, 241, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+    .paused-badge {
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
     /* Hide Default Streamlit Sidebar */
     [data-testid="stSidebar"] {
         display: none;
@@ -119,16 +149,36 @@ if "crawl_thread" not in st.session_state:
     st.session_state.crawl_thread = None
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
+if "is_paused" not in st.session_state:
+    st.session_state.is_paused = False
 if "kw_list" not in st.session_state:
     st.session_state.kw_list = ["fitness", "coach", "trainer", "gym"]
 if "selected_usernames" not in st.session_state:
     st.session_state.selected_usernames = set()
 
+# Inputs are disabled ONLY when engine is actively running and NOT paused
+inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
+
 # ---------------------------------------------------------
-# 1. HEADER
+# 1. HEADER WITH RUNNING CYCLIST ANIMATION
 # ---------------------------------------------------------
-st.markdown("""
+status_badge_html = ""
+if st.session_state.is_running and not st.session_state.is_paused:
+    status_badge_html = """
+    <div style="float: right;" class="running-cyclist">
+        <span class="cyclist-icon">🚴💨</span> Agent Active & Scanning...
+    </div>
+    """
+elif st.session_state.is_running and st.session_state.is_paused:
+    status_badge_html = """
+    <div style="float: right;" class="paused-badge">
+        ⏸ Agent Paused (Editing Allowed)
+    </div>
+    """
+
+st.markdown(f"""
 <div class="app-header">
+    {status_badge_html}
     <div class="app-title">Instagram Lead Finder & Classifier</div>
     <div class="app-subtitle">Extract followers or following, evaluate bio metadata, and classify prospects into targeted sales leads.</div>
 </div>
@@ -154,38 +204,41 @@ with st.container():
             "Login Mode", 
             ["Session ID", "OTP / Login"], 
             horizontal=True, 
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            disabled=inputs_disabled
         )
         if login_method == "Session ID":
             sessionid_val = st.text_input(
                 "Session ID", 
                 type="password", 
                 placeholder="Paste SessionID cookie...", 
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                disabled=inputs_disabled
             )
             ig_username, ig_password = "", ""
         else:
             sessionid_val = ""
             u_col1, u_col2 = st.columns(2)
             with u_col1:
-                ig_username = st.text_input("Username", placeholder="User...", label_visibility="collapsed")
+                ig_username = st.text_input("Username", placeholder="User...", label_visibility="collapsed", disabled=inputs_disabled)
             with u_col2:
-                ig_password = st.text_input("Password", type="password", placeholder="Pass...", label_visibility="collapsed")
+                ig_password = st.text_input("Password", type="password", placeholder="Pass...", label_visibility="collapsed", disabled=inputs_disabled)
 
     with r2_c2:
-        target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed")
-        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed")
+        target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed", disabled=inputs_disabled)
+        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
 
     with r2_c3:
-        max_limit = st.number_input("Check Limit", min_value=10, max_value=10000, value=1000, step=50, label_visibility="collapsed")
-        crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed")
+        max_limit = st.number_input("Check Limit", min_value=10, max_value=10000, value=1000, step=50, label_visibility="collapsed", disabled=inputs_disabled)
+        crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed", disabled=inputs_disabled)
 
     with r2_c4:
         speed_option = st.selectbox(
             "Processing Speed / Delay",
             ["Fast ⚡ (1.0 - 2.5s)", "Standard ⚖️ (2.0 - 4.0s)", "Safe 🛡️ (4.0 - 8.0s)"],
             index=0,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            disabled=inputs_disabled
         )
         if "Fast" in speed_option:
             min_delay_val, max_delay_val = 1.0, 2.5
@@ -197,14 +250,14 @@ with st.container():
     with r2_c5:
         c_kw_in, c_kw_btn = st.columns([3, 1])
         with c_kw_in:
-            new_kw = st.text_input("Add Keyword", placeholder="Add & Enter...", label_visibility="collapsed")
+            new_kw = st.text_input("Add Keyword", placeholder="Add & Enter...", label_visibility="collapsed", disabled=inputs_disabled)
             if new_kw and new_kw.strip():
                 clean_k = new_kw.strip().lower()
                 if clean_k not in st.session_state.kw_list:
                     st.session_state.kw_list.append(clean_k)
                     st.rerun()
         with c_kw_btn:
-            if st.button("Clear", key="clear_kws_btn", use_container_width=True):
+            if st.button("Clear", key="clear_kws_btn", use_container_width=True, disabled=inputs_disabled):
                 st.session_state.kw_list = []
                 st.rerun()
 
@@ -216,7 +269,7 @@ with st.container():
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 3. SEARCH ACTION
+# 3. SEARCH ACTION WITH PAUSE / RESUME SUPPORT
 # ---------------------------------------------------------
 def start_crawl():
     if login_method == "OTP / Login" and (not ig_username or not ig_password):
@@ -246,6 +299,7 @@ def start_crawl():
 
     def run_thread():
         st.session_state.is_running = True
+        st.session_state.is_paused = False
         engine.run_crawl(
             target_username=target_username,
             keywords=st.session_state.kw_list,
@@ -256,21 +310,50 @@ def start_crawl():
             max_delay=max_delay_val
         )
         st.session_state.is_running = False
+        st.session_state.is_paused = False
 
     t = threading.Thread(target=run_thread, daemon=True)
     st.session_state.crawl_thread = t
     t.start()
 
-col_act1, col_act2, col_act3 = st.columns([1, 1, 2])
+col_act1, col_act2, col_act3 = st.columns([1, 1, 1])
+
 with col_act1:
-    if st.button("▶️ Start Search", use_container_width=True, disabled=st.session_state.is_running, type="primary"):
-        start_crawl()
+    if not st.session_state.is_running:
+        if st.button("▶️ Start Search", use_container_width=True, type="primary"):
+            st.session_state.is_paused = False
+            start_crawl()
+    else:
+        if st.session_state.is_paused:
+            if st.button("▶️ Resume Search", use_container_width=True, type="primary"):
+                st.session_state.is_paused = False
+                if st.session_state.engine:
+                    st.session_state.engine.is_paused = False
+                st.rerun()
+        else:
+            st.button("▶️ Searching...", use_container_width=True, disabled=True)
+
 with col_act2:
+    if st.session_state.is_running:
+        if not st.session_state.is_paused:
+            if st.button("⏸ Pause Search", use_container_width=True):
+                st.session_state.is_paused = True
+                if st.session_state.engine:
+                    st.session_state.engine.is_paused = True
+                st.rerun()
+        else:
+            st.button("⏸ Paused", use_container_width=True, disabled=True)
+    else:
+        st.button("⏸ Pause Search", use_container_width=True, disabled=True)
+
+with col_act3:
     if st.button("⏹ Stop Search", use_container_width=True, disabled=not st.session_state.is_running):
         if st.session_state.engine:
             st.session_state.engine.is_running = False
-            st.session_state.is_running = False
-            st.rerun()
+            st.session_state.engine.is_paused = False
+        st.session_state.is_running = False
+        st.session_state.is_paused = False
+        st.rerun()
 
 st.markdown("---")
 
