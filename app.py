@@ -298,9 +298,11 @@ def start_crawl():
         st.error(f"Authentication Failed: {last_err}")
         return
 
+    # Set running state on main thread before spawning background thread
+    st.session_state.is_running = True
+    st.session_state.is_paused = False
+
     def run_thread():
-        st.session_state.is_running = True
-        st.session_state.is_paused = False
         engine.run_crawl(
             target_username=target_username,
             keywords=st.session_state.kw_list,
@@ -310,12 +312,11 @@ def start_crawl():
             min_delay=min_delay_val,
             max_delay=max_delay_val
         )
-        st.session_state.is_running = False
-        st.session_state.is_paused = False
 
     t = threading.Thread(target=run_thread, daemon=True)
     st.session_state.crawl_thread = t
     t.start()
+    st.rerun()
 
 col_act1, col_act2, col_act3 = st.columns([1, 1, 1])
 
@@ -566,6 +567,11 @@ with tab_logs:
         st.code("\n".join(st.session_state.engine.logs[-150:]), language="text")
     else:
         st.info("Agent is idle. Start search to view activity logs.")
+
+# Sync session state with active engine status across background threads
+if st.session_state.engine:
+    st.session_state.is_running = st.session_state.engine.is_running
+    st.session_state.is_paused = st.session_state.engine.is_paused
 
 # Non-blocking auto refresh dashboard if running
 if st.session_state.is_running:
