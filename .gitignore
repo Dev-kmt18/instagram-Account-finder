@@ -1,0 +1,9 @@
+venv/
+*.db
+insta_agent.db
+session-*
+session.json
+exports/
+__pycache__/
+*.pyc
+.DS_Store
