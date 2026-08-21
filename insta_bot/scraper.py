@@ -57,17 +57,14 @@ class InstagramAgentEngine:
         if self.sessionid and len(self.sessionid.strip()) > 5:
             try:
                 self.log("Setting up sessionid cookie authentication...")
-                from urllib.parse import unquote
-                raw_sid = self.sessionid.strip().strip('"').strip("'")
-                clean_sid = unquote(raw_sid)
-                user_id_part = raw_sid.split("%3A")[0].split(":")[0]
+                clean_sid = self.sessionid.strip().strip('"').strip("'")
+                user_id_part = clean_sid.split("%3A")[0].split(":")[0]
                 
-                for domain in [".instagram.com", "www.instagram.com", "instagram.com"]:
-                    L.context._session.cookies.set("sessionid", raw_sid, domain=domain)
-                    L.context._session.cookies.set("sessionid", clean_sid, domain=domain)
-                    L.context._session.cookies.set("csrftoken", "dummy_csrf_token", domain=domain)
-                    if user_id_part and user_id_part.isdigit():
-                        L.context._session.cookies.set("ds_user_id", user_id_part, domain=domain)
+                # Clear any stale cookies and set sessionid cleanly ONCE
+                L.context._session.cookies.clear()
+                L.context._session.cookies.set("sessionid", clean_sid)
+                if user_id_part and user_id_part.isdigit():
+                    L.context._session.cookies.set("ds_user_id", user_id_part)
 
                 logged_user = L.test_login()
                 if logged_user:
