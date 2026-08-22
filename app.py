@@ -367,12 +367,13 @@ else:
         with r2_c4:
             c_kw_in, c_kw_btn = st.columns([3, 1])
             with c_kw_in:
-                new_kw = st.text_input("Add Keyword", placeholder="Add & Enter...", label_visibility="collapsed", disabled=inputs_disabled)
+                new_kw = st.text_input("Add Keyword", placeholder="Type or paste comma-separated...", label_visibility="collapsed", disabled=inputs_disabled)
                 if new_kw and new_kw.strip():
-                    clean_k = new_kw.strip().lower()
-                    if clean_k not in st.session_state.kw_list:
-                        st.session_state.kw_list.append(clean_k)
-                        st.rerun()
+                    parts = [k.strip().lower() for k in new_kw.split(",") if k.strip()]
+                    for p in parts:
+                        if p not in st.session_state.kw_list:
+                            st.session_state.kw_list.append(p)
+                    st.rerun()
             with c_kw_btn:
                 if st.button("Clear", key="clear_kws_btn", use_container_width=True, disabled=inputs_disabled):
                     st.session_state.kw_list = []
@@ -386,7 +387,7 @@ else:
     st.markdown("---")
 
     # Action Toolbar
-    col_act1, col_act2, col_act3, col_act4 = st.columns([1, 1, 1, 1])
+    col_act1, col_act2, col_act3, col_act4, col_act5 = st.columns([1, 1, 1, 1, 1])
 
     with col_act1:
         if not st.session_state.is_running:
@@ -456,6 +457,10 @@ else:
             st.session_state.selected_usernames.clear()
             st.rerun()
 
+    with col_act5:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.rerun()
+
     st.markdown("---")
 
 # ---------------------------------------------------------
@@ -476,7 +481,7 @@ st.markdown("---")
 # 5. FILTERS TOOLBAR (ALIGNED ON SAME HORIZONTAL LINE)
 # ---------------------------------------------------------
 st.markdown("##### Filters")
-f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
+f_col1, f_col2, f_col3, f_col4 = st.columns([2, 1, 1, 0.8])
 
 with f_col1:
     search_query = st.text_input("Search Filter", placeholder="Search by username, name, bio, or keyword...", label_visibility="collapsed")
@@ -484,6 +489,9 @@ with f_col2:
     min_match_score = st.number_input("Minimum Match Score (%)", min_value=0, max_value=100, value=0, step=5, label_visibility="collapsed")
 with f_col3:
     category_filter_sel = st.selectbox("Category Filter", ["All Categories", "Qualified", "Needs Review", "Unqualified"], index=0, label_visibility="collapsed")
+with f_col4:
+    if st.button("🔄 Refresh", use_container_width=True, key="btn_filter_refresh"):
+        st.rerun()
 
 cat_db_param = None
 if category_filter_sel == "Qualified":
