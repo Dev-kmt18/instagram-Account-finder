@@ -306,34 +306,31 @@ class InstagramAgentEngine:
             qualified_count=initial_counts["qualified"]
         )
 
-        # Step 1: Resolve Target Profile & User ID
+        # Step 1: Resolve Target Profile & Numeric User ID
         target_uid = None
-        target_profile = None
+        s_t = self._authed_session()
         try:
-            import instaloader
-            target_profile = instaloader.Profile.from_username(self.client.context, clean_target)
-            target_uid = str(target_profile.userid)
-            self.log(f"🎯 Target Loaded: @{clean_target} (ID: {target_uid}) | Followers: {target_profile.followers} | Following: {target_profile.followees}")
-            add_to_queue(target_uid, clean_target, depth=1)
-        except Exception as e:
-            self.log(f"Target profile fetch notice: {e}. Resolving via Web API...")
+            res_t = s_t.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_target}", timeout=10)
+            if res_t.status_code == 200:
+                u_t = res_t.json().get("data", {}).get("user", {})
+                target_uid = str(u_t.get("id"))
+                fol_cnt = u_t.get("edge_followed_by", {}).get("count", 0)
+                fng_cnt = u_t.get("edge_follow", {}).get("count", 0)
+                self.log(f"🎯 Target Loaded: @{clean_target} (ID: {target_uid}) | Followers: {fol_cnt} | Following: {fng_cnt}")
+        except Exception as e_web:
+            self.log(f"Web profile notice: {e_web}")
+
+        if not target_uid:
             try:
-                s_t = self._authed_session()
-                res_t = s_t.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_target}", timeout=8)
-                if res_t.status_code == 200:
-                    u_t = res_t.json().get("data", {}).get("user", {})
-                    target_uid = str(u_t.get("id"))
-                    fol_cnt = u_t.get("edge_followed_by", {}).get("count", 0)
-                    fng_cnt = u_t.get("edge_follow", {}).get("count", 0)
-                    self.log(f"🎯 Target Loaded via Web API: @{clean_target} (ID: {target_uid}) | Followers: {fol_cnt} | Following: {fng_cnt}")
-                    add_to_queue(target_uid, clean_target, depth=1)
-                else:
-                    target_uid = f"id_{clean_target}"
-                    add_to_queue(target_uid, clean_target, depth=1)
-            except Exception as we:
-                self.log(f"Web API notice: {we}")
+                import instaloader
+                target_profile = instaloader.Profile.from_username(self.client.context, clean_target)
+                target_uid = str(target_profile.userid)
+                self.log(f"🎯 Target Loaded via Instaloader: @{clean_target} (ID: {target_uid})")
+            except Exception as e_il:
+                self.log(f"Could not resolve numeric ID for @{clean_target}: {e_il}")
                 target_uid = f"id_{clean_target}"
-                add_to_queue(target_uid, clean_target, depth=1)
+
+        add_to_queue(target_uid, clean_target, depth=1)
 
         processed_batch_count = 0
 
@@ -379,54 +376,58 @@ class InstagramAgentEngine:
                 mark_queue_status(curr_user_id, "COMPLETED")
                 continue
 
-            self.log(f"📂 Extracting {mode.upper()} of @{curr_username} (Depth Level {curr_depth})...")
+            self.log(f"📂 Extracting {mode.upper()} of @{curr_username} (Level {curr_depth})...")
 
             candidates = []
-            try:
-                import instaloader
-                profile = instaloader.Profile.from_username(self.client.context, curr_username)
-                
-                # Fetch actual Followers of target account
-                if mode in ["followers", "both"]:
-                    try:
-                        self.log(f"Fetching followers list of @{curr_username}...")
-                        for follower in profile.get_followers():
-                            candidates.append((follower.username, str(follower.userid), follower))
-                            if is_goal_reached(get_counts()) or len(candidates) >= max_accounts:
-                                break
-                    except Exception as fe:
-                        self.log(f"Followers fetch note for @{curr_username}: {fe}")
+            s_api = self._authed_session()
 
-                # Fetch actual Following of target account
-                if mode in ["following", "both"] and not is_goal_reached(get_counts()):
-                    try:
-                        self.log(f"Fetching following list of @{curr_username}...")
-                        for followee in profile.get_followees():
-                            candidates.append((followee.username, str(followee.userid), followee))
-                            if is_goal_reached(get_counts()) or len(candidates) >= max_accounts:
-                                break
-                    except Exception as fe:
-                        self.log(f"Following fetch note for @{curr_username}: {fe}")
-            except Exception as e:
-                self.log(f"Extraction note for @{curr_username}: {e}")
-
-            # Fallback: Try Authenticated REST API for target followers/following
-            if not candidates and self.is_running:
+            # 1. Fetch Followers via Direct Web REST API (Primary & Reliable)
+            if mode in ["followers", "both"] and not is_goal_reached(get_counts()):
                 try:
-                    s_api = self._authed_session()
-                    endpoint = "followers" if mode == "followers" else "following"
-                    url = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/{endpoint}/?count=50"
-                    res_api = s_api.get(url, timeout=10)
-                    if res_api.status_code == 200:
-                        u_list = res_api.json().get("users", [])
-                        self.log(f"REST API retrieved {len(u_list)} {endpoint} for @{curr_username}")
+                    url_f = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/followers/?count=50"
+                    r_f = s_api.get(url_f, timeout=10)
+                    if r_f.status_code == 200:
+                        u_list = r_f.json().get("users", [])
+                        self.log(f"✅ Found {len(u_list)} real followers for @{curr_username}")
                         for u in u_list:
                             candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
-                    elif res_api.status_code == 401 or "fail" in res_api.text:
-                        self.log(f"⚠️ Instagram rate limit active. Waiting 10s before proceeding...")
-                        time.sleep(10)
-                except Exception as rest_e:
-                    self.log(f"REST API note: {rest_e}")
+                    elif r_f.status_code == 401:
+                        self.log(f"⚠️ Instagram rate limit on followers endpoint. Waiting 5s...")
+                        time.sleep(5)
+                except Exception as ef:
+                    self.log(f"Followers fetch note: {ef}")
+
+            # 2. Fetch Following via Direct Web REST API (Primary & Reliable)
+            if mode in ["following", "both"] and not is_goal_reached(get_counts()):
+                try:
+                    url_fg = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/following/?count=50"
+                    r_fg = s_api.get(url_fg, timeout=10)
+                    if r_fg.status_code == 200:
+                        u_list = r_fg.json().get("users", [])
+                        self.log(f"✅ Found {len(u_list)} real following accounts for @{curr_username}")
+                        for u in u_list:
+                            candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
+                    elif r_fg.status_code == 401:
+                        self.log(f"⚠️ Instagram rate limit on following endpoint. Waiting 5s...")
+                        time.sleep(5)
+                except Exception as efg:
+                    self.log(f"Following fetch note: {efg}")
+
+            # 3. Fallback to Instaloader GraphQL if REST API didn't return list
+            if not candidates and self.is_running:
+                try:
+                    import instaloader
+                    profile = instaloader.Profile.from_username(self.client.context, curr_username)
+                    if mode in ["followers", "both"]:
+                        for follower in profile.get_followers():
+                            candidates.append((follower.username, str(follower.userid), follower))
+                            if len(candidates) >= max_accounts: break
+                    if mode in ["following", "both"]:
+                        for followee in profile.get_followees():
+                            candidates.append((followee.username, str(followee.userid), followee))
+                            if len(candidates) >= max_accounts: break
+                except Exception as e_il:
+                    self.log(f"Instaloader fallback note: {e_il}")
 
             if not candidates:
                 self.log(f"No more followers/following accessible for @{curr_username} (Private or restricted).")

@@ -162,6 +162,11 @@ if "selected_usernames" not in st.session_state:
 if "awaiting_otp" not in st.session_state:
     st.session_state.awaiting_otp = False
 
+# Synchronize session state with backend engine actively
+if st.session_state.engine:
+    st.session_state.is_running = st.session_state.engine.is_running
+    st.session_state.is_paused = st.session_state.engine.is_paused
+
 # Inputs are disabled ONLY when engine is actively running and NOT paused
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 
@@ -394,16 +399,21 @@ else:
                     st.session_state.is_paused = False
                     st.session_state.is_running = True
                     def run_thread():
-                        st.session_state.engine.run_crawl(
-                            target_username=target_username,
-                            keywords=st.session_state.kw_list,
-                            max_accounts=max_limit,
-                            mode=search_mode,
-                            max_depth=crawl_depth,
-                            stop_mode="qualified" if stop_mode_sel == "Qualified Goal" else "total",
-                            min_delay=min_delay_val,
-                            max_delay=max_delay_val
-                        )
+                        try:
+                            st.session_state.engine.run_crawl(
+                                target_username=target_username,
+                                keywords=st.session_state.kw_list,
+                                max_accounts=max_limit,
+                                mode=search_mode,
+                                max_depth=crawl_depth,
+                                stop_mode="qualified" if stop_mode_sel == "Qualified Goal" else "total",
+                                min_delay=min_delay_val,
+                                max_delay=max_delay_val
+                            )
+                        except Exception as thread_err:
+                            if st.session_state.engine:
+                                st.session_state.engine.log(f"❌ Crawl Error: {thread_err}")
+                                st.session_state.engine.is_running = False
                     t = threading.Thread(target=run_thread, daemon=True)
                     st.session_state.crawl_thread = t
                     t.start()
