@@ -32,15 +32,36 @@ class InstagramAgentEngine:
         self.logs = []
         self.min_delay = MIN_DELAY_PER_PROFILE
         self.max_delay = MAX_DELAY_PER_PROFILE
+        self.max_depth = 1
+        self.two_factor_required = False
+        self.pending_L = None
 
     def log(self, message: str, level: str = "INFO"):
         msg = f"[{time.strftime('%H:%M:%S')}] {message}"
         self.logs.append(msg)
         logger.info(message)
 
+    def _authed_session(self) -> "requests.Session":
+        """Return an authenticated requests.Session using the logged-in session cookie."""
+        import requests
+        s = requests.Session()
+        s.headers.update({
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "X-IG-App-ID": "936619743392459",
+        })
+        # Reuse the authenticated instaloader session cookies (sessionid etc.)
+        if self.client and hasattr(self.client, "context") and hasattr(self.client.context, "_session"):
+            for cookie in self.client.context._session.cookies:
+                s.cookies.set(cookie.name, cookie.value, domain=cookie.domain or ".instagram.com")
+        elif self.sessionid:
+            s.cookies.set("sessionid", self.sessionid.strip(), domain=".instagram.com")
+        return s
+
     def login(self) -> bool:
-        """Authenticate with Instagram via Session Cookie or Credentials."""
+        """Authenticate with Instagram via Session Cookie or Credentials / 2FA."""
         self.log("Authenticating with Instagram...")
+        self.two_factor_required = False
+        self.pending_L = None
 
         import instaloader
         L = instaloader.Instaloader(
@@ -115,22 +136,20 @@ class InstagramAgentEngine:
                 self.log(f"❌ Cookie Auth Error: {e}")
                 return False
 
-        # 2. Check for saved native session file (only if username provided without password)
-        if self.username and not self.password:
+        # 2. Check for saved native session file (if username provided)
+        if self.username:
             session_filename = f"session-{self.username}"
             if os.path.exists(session_filename):
                 try:
                     L.load_session_from_file(self.username, session_filename)
-                    logged_user = L.test_login()
-                    if logged_user:
-                        self.log(f"Restored active session for @{logged_user}!")
-                        self.client = L
-                        self.backend = "instaloader"
-                        return True
+                    self.log(f"Restored active session from saved cache for @{self.username}!")
+                    self.client = L
+                    self.backend = "instaloader"
+                    return True
                 except Exception as e:
-                    self.log(f"Failed to load session for @{self.username}: {e}")
+                    self.log(f"Saved session expired for @{self.username}, proceeding with fresh authentication...")
 
-        # 3. Password Login (Fresh login when password provided)
+        # 3. Password Login (with full 2FA / OTP Verification Support)
         if self.username and self.password:
             try:
                 self.log(f"Logging in with credentials for @{self.username}...")
@@ -141,11 +160,36 @@ class InstagramAgentEngine:
                 self.client = L
                 self.backend = "instaloader"
                 return True
+            except instaloader.exceptions.TwoFactorAuthRequiredException:
+                self.two_factor_required = True
+                self.pending_L = L
+                self.log("🔐 Two-Factor Authentication (OTP) Required! Please enter the 6-digit code.")
+                return "2FA_REQUIRED"
             except Exception as e:
                 self.log(f"❌ Password Login error for @{self.username}: {e}")
                 return False
 
         return False
+
+    def confirm_two_factor(self, code: str) -> bool:
+        """Complete 2FA login with received OTP verification code."""
+        if not self.pending_L:
+            self.log("❌ No pending 2FA login session found.")
+            return False
+        try:
+            self.log(f"Submitting 2FA OTP code for @{self.username}...")
+            self.pending_L.two_factor_login(code.strip())
+            session_filename = f"session-{self.username}"
+            self.pending_L.save_session_to_file(session_filename)
+            self.client = self.pending_L
+            self.backend = "instaloader"
+            self.two_factor_required = False
+            self.pending_L = None
+            self.log(f"🎉 2FA OTP Verified! Logged in successfully as @{self.username}!")
+            return True
+        except Exception as e:
+            self.log(f"❌ 2FA Verification Error: {e}")
+            return False
 
     def process_profile_node(
         self,
@@ -181,14 +225,9 @@ class InstagramAgentEngine:
                 follower_count = prof.followers
                 following_count = prof.followees
         except Exception as e:
-            # Resilient Fallback: Query Web REST API directly
+            # Resilient Fallback: Query Web REST API directly (authenticated)
             try:
-                import requests
-                s = requests.Session()
-                s.headers.update({
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "X-IG-App-ID": "936619743392459"
-                })
+                s = self._authed_session()
                 res = s.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={node_username}", timeout=8)
                 if res.status_code == 200:
                     u = res.json().get("data", {}).get("user", {})
@@ -225,8 +264,8 @@ class InstagramAgentEngine:
         priv_str = " (Private Profile)" if is_private else ""
         self.log(f"Processed @{node_username}{priv_str} -> {badge} ({match_score:.0f}%) | Matched: {matched_kw}")
 
-        # If profile is public, add to queue for deeper graph crawling
-        if not is_private:
+        # If profile is public and within depth budget, add to queue for deeper graph crawling
+        if not is_private and depth < self.max_depth:
             add_to_queue(str(node_user_id), node_username, depth + 1)
 
         return {
@@ -254,6 +293,7 @@ class InstagramAgentEngine:
         self.is_paused = False
         self.min_delay = min_delay
         self.max_delay = max_delay
+        self.max_depth = max(1, int(max_depth))
         
         clean_target = target_username.strip().lstrip("@")
         self.log(f"🚀 Launching Agent Crawl on target: @{clean_target}")
@@ -279,14 +319,9 @@ class InstagramAgentEngine:
             target_uid = str(target_profile.userid)
             add_to_queue(target_uid, clean_target, depth=1)
         except Exception as e:
-            # Resilient fallback: fetch target ID or queue directly
+            # Resilient fallback: fetch target ID via authenticated Web API or queue directly
             try:
-                import requests
-                s_t = requests.Session()
-                s_t.headers.update({
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "X-IG-App-ID": "936619743392459"
-                })
+                s_t = self._authed_session()
                 res_t = s_t.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_target}", timeout=8)
                 if res_t.status_code == 200:
                     u_t = res_t.json().get("data", {}).get("user", {})
@@ -354,7 +389,12 @@ class InstagramAgentEngine:
 
             curr_username = queue_item["username"]
             curr_user_id = queue_item["user_id"]
-            curr_depth = queue_item["depth"]
+            curr_depth = int(queue_item["depth"] or 1)
+
+            # Do not walk deeper than the requested crawl depth
+            if curr_depth > self.max_depth:
+                mark_queue_status(curr_user_id, "COMPLETED")
+                continue
 
             self.log(f"Scanning followers/following of @{curr_username} (Level {curr_depth})...")
 

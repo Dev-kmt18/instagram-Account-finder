@@ -155,6 +155,10 @@ if "kw_list" not in st.session_state:
     st.session_state.kw_list = ["fitness", "coach", "trainer", "gym"]
 if "selected_usernames" not in st.session_state:
     st.session_state.selected_usernames = set()
+if "awaiting_otp" not in st.session_state:
+    st.session_state.awaiting_otp = False
+if "pending_crawl_params" not in st.session_state:
+    st.session_state.pending_crawl_params = {}
 
 # Inputs are disabled ONLY when engine is actively running and NOT paused
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
@@ -262,7 +266,7 @@ with st.container():
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 3. SEARCH ACTION WITH PAUSE / RESUME SUPPORT
+# 3. SEARCH ACTION WITH PAUSE / RESUME & 2FA OTP SUPPORT
 # ---------------------------------------------------------
 def start_crawl():
     if login_method == "OTP / Login" and (not ig_username or not ig_password):
@@ -286,7 +290,20 @@ def start_crawl():
     st.session_state.engine = engine
 
     # Authenticate
-    if not engine.login():
+    login_result = engine.login()
+    if login_result == "2FA_REQUIRED" or engine.two_factor_required:
+        st.session_state.awaiting_otp = True
+        st.session_state.pending_crawl_params = {
+            "target_username": target_username,
+            "max_limit": max_limit,
+            "search_mode": search_mode,
+            "crawl_depth": crawl_depth,
+            "min_delay_val": min_delay_val,
+            "max_delay_val": max_delay_val
+        }
+        st.rerun()
+        return
+    elif not login_result:
         last_err = engine.logs[-1] if engine.logs else "Check credentials or cookie!"
         st.error(f"Authentication Failed: {last_err}")
         return
@@ -310,6 +327,50 @@ def start_crawl():
     st.session_state.crawl_thread = t
     t.start()
     st.rerun()
+
+# ---------------------------------------------------------
+# 2FA / OTP INTERACTIVE VERIFICATION PROMPT
+# ---------------------------------------------------------
+if st.session_state.get("awaiting_otp", False):
+    st.markdown("""
+    <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid #6366f1; border-radius: 8px; padding: 12px 16px; margin-bottom: 0.8rem;">
+        <span style="color: #a5b4fc; font-weight: 600; font-size: 0.95rem;">🔐 Two-Factor Authentication (OTP) Required</span>
+        <div style="color: #cbd5e1; font-size: 0.82rem; margin-top: 4px;">Instagram has sent a 6-digit security code to your device (SMS / WhatsApp / Authenticator App). Please enter it below to complete login.</div>
+    </div>
+    """, unsafe_allow_html=True)
+    otp_col1, otp_col2, otp_col3 = st.columns([2, 1, 1])
+    with otp_col1:
+        otp_input_val = st.text_input("6-Digit OTP Code", placeholder="e.g. 123456", label_visibility="collapsed", key="otp_input_box")
+    with otp_col2:
+        if st.button("✅ Verify & Start", type="primary", use_container_width=True, key="submit_otp_btn"):
+            if otp_input_val and st.session_state.engine:
+                if st.session_state.engine.confirm_two_factor(otp_input_val):
+                    st.session_state.awaiting_otp = False
+                    p = st.session_state.get("pending_crawl_params", {})
+                    st.session_state.is_running = True
+                    st.session_state.is_paused = False
+                    def run_thread_otp():
+                        st.session_state.engine.run_crawl(
+                            target_username=p.get("target_username", target_username),
+                            keywords=st.session_state.kw_list,
+                            max_accounts=p.get("max_limit", max_limit),
+                            mode=p.get("search_mode", search_mode),
+                            max_depth=p.get("crawl_depth", crawl_depth),
+                            min_delay=p.get("min_delay_val", min_delay_val),
+                            max_delay=p.get("max_delay_val", max_delay_val)
+                        )
+                    t_otp = threading.Thread(target=run_thread_otp, daemon=True)
+                    st.session_state.crawl_thread = t_otp
+                    t_otp.start()
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid OTP code or verification expired. Check Live Logs tab.")
+            else:
+                st.error("Please enter the 6-digit OTP code.")
+    with otp_col3:
+        if st.button("❌ Cancel", use_container_width=True, key="cancel_otp_btn"):
+            st.session_state.awaiting_otp = False
+            st.rerun()
 
 col_act1, col_act2, col_act3, col_act4 = st.columns([1, 1, 1, 1])
 
