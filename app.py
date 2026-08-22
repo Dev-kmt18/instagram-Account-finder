@@ -151,14 +151,16 @@ if "is_running" not in st.session_state:
     st.session_state.is_running = False
 if "is_paused" not in st.session_state:
     st.session_state.is_paused = False
+if "is_authenticated" not in st.session_state:
+    st.session_state.is_authenticated = False
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = ""
 if "kw_list" not in st.session_state:
     st.session_state.kw_list = ["fitness", "coach", "trainer", "gym"]
 if "selected_usernames" not in st.session_state:
     st.session_state.selected_usernames = set()
 if "awaiting_otp" not in st.session_state:
     st.session_state.awaiting_otp = False
-if "pending_crawl_params" not in st.session_state:
-    st.session_state.pending_crawl_params = {}
 
 # Inputs are disabled ONLY when engine is actively running and NOT paused
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
@@ -182,242 +184,258 @@ st.markdown(
 )
 
 # ---------------------------------------------------------
-# 2. TOP HORIZONTAL CONFIGURATION SECTION (CLEAN ALIGNED GRID)
+# 2. STEP 1: AUTHENTICATION (SHOWN WHEN NOT LOGGED IN)
 # ---------------------------------------------------------
-with st.container():
-    # Row 1: Titles
-    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.4])
-    r1_c1.markdown('<div class="config-header">1. Login Method</div>', unsafe_allow_html=True)
-    r1_c2.markdown('<div class="config-header">2. Target Account</div>', unsafe_allow_html=True)
-    r1_c3.markdown('<div class="config-header">3. Search Parameters</div>', unsafe_allow_html=True)
-    r1_c4.markdown('<div class="config-header">4. Speed & Delays</div>', unsafe_allow_html=True)
-    r1_c5.markdown('<div class="config-header">5. Keywords</div>', unsafe_allow_html=True)
+if not st.session_state.is_authenticated:
+    st.markdown("""
+    <div style="background: #111111; border: 1px solid #222222; border-radius: 10px; padding: 18px 20px 14px 20px; margin-bottom: 1.2rem;">
+        <div style="color: #ffffff; font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <span>🔐 Step 1: Connect Instagram Account</span>
+        </div>
+        <div style="color: #94a3b8; font-size: 0.84rem; margin-top: 4px; margin-bottom: 12px;">
+            Pehle apna account ya sessionid verify karein. Authenticate hone ke baad hi Target Account, Keywords aur Search Parameters unlock honge.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Row 2: Inputs perfectly aligned on one horizontal line
-    r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([1.2, 1.2, 1.2, 1.2, 1.4])
+    auth_col_mode, auth_col_inputs = st.columns([1.2, 3.8])
 
-    with r2_c1:
-        login_method = st.radio(
-            "Login Mode", 
+    with auth_col_mode:
+        auth_mode = st.radio(
+            "Authentication Method", 
             ["Session ID", "OTP / Login"], 
-            horizontal=True, 
-            label_visibility="collapsed",
-            disabled=inputs_disabled
+            index=0,
+            label_visibility="collapsed"
         )
-        if login_method == "Session ID":
-            sessionid_val = st.text_input(
-                "Session ID", 
-                type="password", 
-                placeholder="Paste SessionID cookie...", 
+
+    with auth_col_inputs:
+        if auth_mode == "Session ID":
+            c_sid_in, c_sid_btn = st.columns([3, 1])
+            with c_sid_in:
+                sessionid_input_val = st.text_input(
+                    "Session ID", 
+                    type="password", 
+                    placeholder="Paste your Instagram sessionid cookie value here...", 
+                    label_visibility="collapsed"
+                )
+            with c_sid_btn:
+                if st.button("🔐 Connect Account", type="primary", use_container_width=True):
+                    if sessionid_input_val and len(sessionid_input_val.strip()) > 5:
+                        with st.spinner("Verifying session cookie with Instagram..."):
+                            eng = InstagramAgentEngine(sessionid=sessionid_input_val)
+                            if eng.login():
+                                st.session_state.engine = eng
+                                st.session_state.is_authenticated = True
+                                st.session_state.auth_user = eng.username or "Session Cookie"
+                                st.success("🎉 Connected successfully!")
+                                st.rerun()
+                            else:
+                                last_err = eng.logs[-1] if eng.logs else "Invalid session cookie"
+                                st.error(f"Authentication Failed: {last_err}")
+                    else:
+                        st.error("Please enter a valid sessionid cookie.")
+        else:
+            # Username & Password / OTP Mode
+            if not st.session_state.awaiting_otp:
+                c_u1, c_u2, c_u3 = st.columns([1.5, 1.5, 1])
+                with c_u1:
+                    u_val = st.text_input("Username", placeholder="Instagram username...", label_visibility="collapsed")
+                with c_u2:
+                    p_val = st.text_input("Password", type="password", placeholder="Instagram password...", label_visibility="collapsed")
+                with c_u3:
+                    if st.button("🔐 Login Account", type="primary", use_container_width=True):
+                        if u_val and p_val:
+                            with st.spinner("Authenticating with Instagram..."):
+                                eng = InstagramAgentEngine(username=u_val, password=p_val)
+                                st.session_state.engine = eng
+                                login_res = eng.login()
+                                if login_res == "2FA_REQUIRED" or eng.two_factor_required:
+                                    st.session_state.awaiting_otp = True
+                                    st.rerun()
+                                elif login_res:
+                                    st.session_state.is_authenticated = True
+                                    st.session_state.auth_user = eng.username or u_val
+                                    st.success(f"🎉 Connected as @{st.session_state.auth_user}!")
+                                    st.rerun()
+                                else:
+                                    last_err = eng.logs[-1] if eng.logs else "Login failed"
+                                    st.error(f"Authentication Failed: {last_err}")
+                        else:
+                            st.error("Please enter both username and password.")
+            else:
+                # 2FA OTP Interactive Verification Box
+                st.markdown("""
+                <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid #6366f1; border-radius: 8px; padding: 10px 14px; margin-bottom: 0.8rem;">
+                    <span style="color: #a5b4fc; font-weight: 600; font-size: 0.92rem;">🔐 Two-Factor Authentication (OTP) Required</span>
+                    <div style="color: #cbd5e1; font-size: 0.8rem; margin-top: 2px;">Instagram has sent a 6-digit security code to your device. Enter it below to complete authentication.</div>
+                </div>
+                """, unsafe_allow_html=True)
+                otp_c1, otp_c2, otp_c3 = st.columns([2, 1, 1])
+                with otp_c1:
+                    otp_val_in = st.text_input("6-Digit OTP", placeholder="Enter 6-digit code...", label_visibility="collapsed", key="otp_in_step1")
+                with otp_c2:
+                    if st.button("✅ Confirm OTP", type="primary", use_container_width=True):
+                        if otp_val_in and st.session_state.engine:
+                            if st.session_state.engine.confirm_two_factor(otp_val_in):
+                                st.session_state.awaiting_otp = False
+                                st.session_state.is_authenticated = True
+                                st.session_state.auth_user = st.session_state.engine.username
+                                st.success("🎉 OTP Verified & Connected!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Invalid OTP code or verification expired.")
+                        else:
+                            st.error("Please enter the 6-digit OTP code.")
+                with otp_c3:
+                    if st.button("❌ Cancel", use_container_width=True):
+                        st.session_state.awaiting_otp = False
+                        st.rerun()
+
+    st.markdown("---")
+
+# ---------------------------------------------------------
+# 3. STEP 2: SEARCH SETUP & CONTROLS (UNLOCKED AFTER STEP 1)
+# ---------------------------------------------------------
+else:
+    # Connected Status Banner
+    b_col1, b_col2 = st.columns([4, 1])
+    with b_col1:
+        st.markdown(f"""
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 7px 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 0.8rem;">
+            <span style="color: #10b981; font-weight: 700; font-size: 0.88rem;">🟢 Account Connected:</span>
+            <span style="color: #ffffff; font-weight: 600; font-size: 0.88rem;">@{st.session_state.auth_user}</span>
+            <span style="color: #94a3b8; font-size: 0.78rem;">— Ready for scraping & classification</span>
+        </div>
+        """, unsafe_allow_html=True)
+    with b_col2:
+        if st.button("🔄 Disconnect / Change", use_container_width=True, disabled=inputs_disabled):
+            st.session_state.is_authenticated = False
+            st.session_state.engine = None
+            st.session_state.auth_user = ""
+            st.rerun()
+
+    # Search Configuration Grid
+    with st.container():
+        # Row 1: Titles
+        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.3, 1.2, 1.2, 1.5])
+        r1_c1.markdown('<div class="config-header">1. Target Account</div>', unsafe_allow_html=True)
+        r1_c2.markdown('<div class="config-header">2. Search Parameters</div>', unsafe_allow_html=True)
+        r1_c3.markdown('<div class="config-header">3. Speed & Delays</div>', unsafe_allow_html=True)
+        r1_c4.markdown('<div class="config-header">4. Keywords</div>', unsafe_allow_html=True)
+
+        # Row 2: Inputs
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.3, 1.2, 1.2, 1.5])
+
+        with r2_c1:
+            target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed", disabled=inputs_disabled)
+            search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
+
+        with r2_c2:
+            max_limit = st.number_input("Check Limit", min_value=10, max_value=10000, value=1000, step=50, label_visibility="collapsed", disabled=inputs_disabled)
+            crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed", disabled=inputs_disabled)
+
+        with r2_c3:
+            speed_option = st.selectbox(
+                "Processing Speed / Delay",
+                ["Fast ⚡ (1.0 - 2.5s)", "Standard ⚖️ (2.0 - 4.0s)", "Safe 🛡️ (4.0 - 8.0s)"],
+                index=0,
                 label_visibility="collapsed",
                 disabled=inputs_disabled
             )
-            ig_username, ig_password = "", ""
-        else:
-            sessionid_val = ""
-            u_col1, u_col2 = st.columns(2)
-            with u_col1:
-                ig_username = st.text_input("Username", placeholder="User...", label_visibility="collapsed", disabled=inputs_disabled)
-            with u_col2:
-                ig_password = st.text_input("Password", type="password", placeholder="Pass...", label_visibility="collapsed", disabled=inputs_disabled)
-
-    with r2_c2:
-        target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed", disabled=inputs_disabled)
-        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
-
-    with r2_c3:
-        max_limit = st.number_input("Check Limit", min_value=10, max_value=10000, value=1000, step=50, label_visibility="collapsed", disabled=inputs_disabled)
-        crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed", disabled=inputs_disabled)
-
-    with r2_c4:
-        speed_option = st.selectbox(
-            "Processing Speed / Delay",
-            ["Fast ⚡ (1.0 - 2.5s)", "Standard ⚖️ (2.0 - 4.0s)", "Safe 🛡️ (4.0 - 8.0s)"],
-            index=0,
-            label_visibility="collapsed",
-            disabled=inputs_disabled
-        )
-        if "Fast" in speed_option:
-            min_delay_val, max_delay_val = 1.0, 2.5
-        elif "Standard" in speed_option:
-            min_delay_val, max_delay_val = 2.0, 4.0
-        else:
-            min_delay_val, max_delay_val = 4.0, 8.0
-
-    with r2_c5:
-        c_kw_in, c_kw_btn = st.columns([3, 1])
-        with c_kw_in:
-            new_kw = st.text_input("Add Keyword", placeholder="Add & Enter...", label_visibility="collapsed", disabled=inputs_disabled)
-            if new_kw and new_kw.strip():
-                clean_k = new_kw.strip().lower()
-                if clean_k not in st.session_state.kw_list:
-                    st.session_state.kw_list.append(clean_k)
-                    st.rerun()
-        with c_kw_btn:
-            if st.button("Clear", key="clear_kws_btn", use_container_width=True, disabled=inputs_disabled):
-                st.session_state.kw_list = []
-                st.rerun()
-
-        # Render chips
-        if st.session_state.kw_list:
-            chips_markup = "".join([f'<span class="chip-tag">{k}</span>' for k in st.session_state.kw_list])
-            st.markdown(f'<div style="margin-top:0.3rem;">{chips_markup}</div>', unsafe_allow_html=True)
-
-st.markdown("---")
-
-# ---------------------------------------------------------
-# 3. SEARCH ACTION WITH PAUSE / RESUME & 2FA OTP SUPPORT
-# ---------------------------------------------------------
-def start_crawl():
-    if login_method == "OTP / Login" and (not ig_username or not ig_password):
-        st.error("Please enter Instagram Username & Password!")
-        return
-    if login_method == "Session ID" and not sessionid_val:
-        st.error("Please enter your Instagram sessionid cookie value!")
-        return
-    if not target_username:
-        st.error("Please enter Target Account Username!")
-        return
-    if not st.session_state.kw_list:
-        st.error("Please add at least 1 keyword!")
-        return
-
-    engine = InstagramAgentEngine(
-        username=ig_username, 
-        password=ig_password, 
-        sessionid=sessionid_val
-    )
-    st.session_state.engine = engine
-
-    # Authenticate
-    login_result = engine.login()
-    if login_result == "2FA_REQUIRED" or engine.two_factor_required:
-        st.session_state.awaiting_otp = True
-        st.session_state.pending_crawl_params = {
-            "target_username": target_username,
-            "max_limit": max_limit,
-            "search_mode": search_mode,
-            "crawl_depth": crawl_depth,
-            "min_delay_val": min_delay_val,
-            "max_delay_val": max_delay_val
-        }
-        st.rerun()
-        return
-    elif not login_result:
-        last_err = engine.logs[-1] if engine.logs else "Check credentials or cookie!"
-        st.error(f"Authentication Failed: {last_err}")
-        return
-
-    # Set running state on main thread before spawning background thread
-    st.session_state.is_running = True
-    st.session_state.is_paused = False
-
-    def run_thread():
-        engine.run_crawl(
-            target_username=target_username,
-            keywords=st.session_state.kw_list,
-            max_accounts=max_limit,
-            mode=search_mode,
-            max_depth=crawl_depth,
-            min_delay=min_delay_val,
-            max_delay=max_delay_val
-        )
-
-    t = threading.Thread(target=run_thread, daemon=True)
-    st.session_state.crawl_thread = t
-    t.start()
-    st.rerun()
-
-# ---------------------------------------------------------
-# 2FA / OTP INTERACTIVE VERIFICATION PROMPT
-# ---------------------------------------------------------
-if st.session_state.get("awaiting_otp", False):
-    st.markdown("""
-    <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid #6366f1; border-radius: 8px; padding: 12px 16px; margin-bottom: 0.8rem;">
-        <span style="color: #a5b4fc; font-weight: 600; font-size: 0.95rem;">🔐 Two-Factor Authentication (OTP) Required</span>
-        <div style="color: #cbd5e1; font-size: 0.82rem; margin-top: 4px;">Instagram has sent a 6-digit security code to your device (SMS / WhatsApp / Authenticator App). Please enter it below to complete login.</div>
-    </div>
-    """, unsafe_allow_html=True)
-    otp_col1, otp_col2, otp_col3 = st.columns([2, 1, 1])
-    with otp_col1:
-        otp_input_val = st.text_input("6-Digit OTP Code", placeholder="e.g. 123456", label_visibility="collapsed", key="otp_input_box")
-    with otp_col2:
-        if st.button("✅ Verify & Start", type="primary", use_container_width=True, key="submit_otp_btn"):
-            if otp_input_val and st.session_state.engine:
-                if st.session_state.engine.confirm_two_factor(otp_input_val):
-                    st.session_state.awaiting_otp = False
-                    p = st.session_state.get("pending_crawl_params", {})
-                    st.session_state.is_running = True
-                    st.session_state.is_paused = False
-                    def run_thread_otp():
-                        st.session_state.engine.run_crawl(
-                            target_username=p.get("target_username", target_username),
-                            keywords=st.session_state.kw_list,
-                            max_accounts=p.get("max_limit", max_limit),
-                            mode=p.get("search_mode", search_mode),
-                            max_depth=p.get("crawl_depth", crawl_depth),
-                            min_delay=p.get("min_delay_val", min_delay_val),
-                            max_delay=p.get("max_delay_val", max_delay_val)
-                        )
-                    t_otp = threading.Thread(target=run_thread_otp, daemon=True)
-                    st.session_state.crawl_thread = t_otp
-                    t_otp.start()
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid OTP code or verification expired. Check Live Logs tab.")
+            if "Fast" in speed_option:
+                min_delay_val, max_delay_val = 1.0, 2.5
+            elif "Standard" in speed_option:
+                min_delay_val, max_delay_val = 2.0, 4.0
             else:
-                st.error("Please enter the 6-digit OTP code.")
-    with otp_col3:
-        if st.button("❌ Cancel", use_container_width=True, key="cancel_otp_btn"):
-            st.session_state.awaiting_otp = False
+                min_delay_val, max_delay_val = 4.0, 8.0
+
+        with r2_c4:
+            c_kw_in, c_kw_btn = st.columns([3, 1])
+            with c_kw_in:
+                new_kw = st.text_input("Add Keyword", placeholder="Add & Enter...", label_visibility="collapsed", disabled=inputs_disabled)
+                if new_kw and new_kw.strip():
+                    clean_k = new_kw.strip().lower()
+                    if clean_k not in st.session_state.kw_list:
+                        st.session_state.kw_list.append(clean_k)
+                        st.rerun()
+            with c_kw_btn:
+                if st.button("Clear", key="clear_kws_btn", use_container_width=True, disabled=inputs_disabled):
+                    st.session_state.kw_list = []
+                    st.rerun()
+
+            # Render chips
+            if st.session_state.kw_list:
+                chips_markup = "".join([f'<span class="chip-tag">{k}</span>' for k in st.session_state.kw_list])
+                st.markdown(f'<div style="margin-top:0.3rem;">{chips_markup}</div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Action Toolbar
+    col_act1, col_act2, col_act3, col_act4 = st.columns([1, 1, 1, 1])
+
+    with col_act1:
+        if not st.session_state.is_running:
+            if st.button("▶️ Start Search", use_container_width=True, type="primary"):
+                if not target_username:
+                    st.error("Please enter Target Account Username!")
+                elif not st.session_state.kw_list:
+                    st.error("Please add at least 1 keyword!")
+                else:
+                    st.session_state.is_paused = False
+                    st.session_state.is_running = True
+                    def run_thread():
+                        st.session_state.engine.run_crawl(
+                            target_username=target_username,
+                            keywords=st.session_state.kw_list,
+                            max_accounts=max_limit,
+                            mode=search_mode,
+                            max_depth=crawl_depth,
+                            min_delay=min_delay_val,
+                            max_delay=max_delay_val
+                        )
+                    t = threading.Thread(target=run_thread, daemon=True)
+                    st.session_state.crawl_thread = t
+                    t.start()
+                    st.rerun()
+        else:
+            if st.session_state.is_paused:
+                if st.button("▶️ Resume Search", use_container_width=True, type="primary"):
+                    st.session_state.is_paused = False
+                    if st.session_state.engine:
+                        st.session_state.engine.is_paused = False
+                    st.rerun()
+            else:
+                st.button("▶️ Searching...", use_container_width=True, disabled=True)
+
+    with col_act2:
+        if st.session_state.is_running:
+            if not st.session_state.is_paused:
+                if st.button("⏸ Pause Search", use_container_width=True):
+                    st.session_state.is_paused = True
+                    if st.session_state.engine:
+                        st.session_state.engine.is_paused = True
+                    st.rerun()
+            else:
+                st.button("⏸ Paused", use_container_width=True, disabled=True)
+        else:
+            st.button("⏸ Pause Search", use_container_width=True, disabled=True)
+
+    with col_act3:
+        if st.button("⏹ Stop Search", use_container_width=True, disabled=not st.session_state.is_running):
+            if st.session_state.engine:
+                st.session_state.engine.is_running = False
+                st.session_state.engine.is_paused = False
+            st.session_state.is_running = False
+            st.session_state.is_paused = False
             st.rerun()
 
-col_act1, col_act2, col_act3, col_act4 = st.columns([1, 1, 1, 1])
+    with col_act4:
+        if st.button("🗑️ Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
+            clear_database()
+            st.session_state.selected_usernames.clear()
+            st.rerun()
 
-with col_act1:
-    if not st.session_state.is_running:
-        if st.button("▶️ Start Search", use_container_width=True, type="primary"):
-            st.session_state.is_paused = False
-            start_crawl()
-    else:
-        if st.session_state.is_paused:
-            if st.button("▶️ Resume Search", use_container_width=True, type="primary"):
-                st.session_state.is_paused = False
-                if st.session_state.engine:
-                    st.session_state.engine.is_paused = False
-                st.rerun()
-        else:
-            st.button("▶️ Searching...", use_container_width=True, disabled=True)
-
-with col_act2:
-    if st.session_state.is_running:
-        if not st.session_state.is_paused:
-            if st.button("⏸ Pause Search", use_container_width=True):
-                st.session_state.is_paused = True
-                if st.session_state.engine:
-                    st.session_state.engine.is_paused = True
-                st.rerun()
-        else:
-            st.button("⏸ Paused", use_container_width=True, disabled=True)
-    else:
-        st.button("⏸ Pause Search", use_container_width=True, disabled=True)
-
-with col_act3:
-    if st.button("⏹ Stop Search", use_container_width=True, disabled=not st.session_state.is_running):
-        if st.session_state.engine:
-            st.session_state.engine.is_running = False
-            st.session_state.engine.is_paused = False
-        st.session_state.is_running = False
-        st.session_state.is_paused = False
-        st.rerun()
-
-with col_act4:
-    if st.button("🗑️ Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
-        clear_database()
-        st.session_state.selected_usernames.clear()
-        st.rerun()
-
-st.markdown("---")
+    st.markdown("---")
 
 # ---------------------------------------------------------
 # 4. SUMMARY METRICS
