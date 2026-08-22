@@ -309,6 +309,12 @@ else:
         """, unsafe_allow_html=True)
     with b_col2:
         if st.button("🔄 Disconnect / Change", use_container_width=True, disabled=inputs_disabled):
+            import glob
+            for sf in glob.glob("session-*"):
+                try:
+                    os.remove(sf)
+                except Exception:
+                    pass
             st.session_state.is_authenticated = False
             st.session_state.engine = None
             st.session_state.auth_user = ""
@@ -317,21 +323,25 @@ else:
     # Search Configuration Grid
     with st.container():
         # Row 1: Titles
-        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.3, 1.2, 1.2, 1.5])
+        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.3, 1.3, 1.2, 1.4])
         r1_c1.markdown('<div class="config-header">1. Target Account</div>', unsafe_allow_html=True)
-        r1_c2.markdown('<div class="config-header">2. Search Parameters</div>', unsafe_allow_html=True)
+        r1_c2.markdown('<div class="config-header">2. Limits & Stop Goal</div>', unsafe_allow_html=True)
         r1_c3.markdown('<div class="config-header">3. Speed & Delays</div>', unsafe_allow_html=True)
         r1_c4.markdown('<div class="config-header">4. Keywords</div>', unsafe_allow_html=True)
 
         # Row 2: Inputs
-        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.3, 1.2, 1.2, 1.5])
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.3, 1.3, 1.2, 1.4])
 
         with r2_c1:
             target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed", disabled=inputs_disabled)
             search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
 
         with r2_c2:
-            max_limit = st.number_input("Check Limit", min_value=10, max_value=10000, value=1000, step=50, label_visibility="collapsed", disabled=inputs_disabled)
+            c_l1, c_l2 = st.columns([1.1, 1.3])
+            with c_l1:
+                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000, value=1000, step=50, label_visibility="collapsed", disabled=inputs_disabled)
+            with c_l2:
+                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
             crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed", disabled=inputs_disabled)
 
         with r2_c3:
@@ -390,6 +400,7 @@ else:
                             max_accounts=max_limit,
                             mode=search_mode,
                             max_depth=crawl_depth,
+                            stop_mode="qualified" if stop_mode_sel == "Qualified Goal" else "total",
                             min_delay=min_delay_val,
                             max_delay=max_delay_val
                         )

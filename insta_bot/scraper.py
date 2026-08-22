@@ -268,14 +268,6 @@ class InstagramAgentEngine:
         if not is_private and depth < self.max_depth:
             add_to_queue(str(node_user_id), node_username, depth + 1)
 
-        return {
-            "username": node_username,
-            "category": category,
-            "matched_keywords": matched_kw,
-            "is_private": is_private,
-            "match_score": match_score
-        }
-
     def run_crawl(
         self,
         target_username: str,
@@ -283,11 +275,12 @@ class InstagramAgentEngine:
         max_accounts: int = 1000,
         mode: str = "followers",
         max_depth: int = 1,
+        stop_mode: str = "total",
         progress_callback: Optional[Callable[[Dict], None]] = None,
         min_delay: float = MIN_DELAY_PER_PROFILE,
         max_delay: float = MAX_DELAY_PER_PROFILE
     ):
-        """Continuous robust queue-driven crawl engine that STRICTLY runs until max_accounts is reached."""
+        """Queue-driven crawl engine that extracts target's actual followers/following and classifies prospects."""
         init_db()
         self.is_running = True
         self.is_paused = False
@@ -296,8 +289,9 @@ class InstagramAgentEngine:
         self.max_depth = max(1, int(max_depth))
         
         clean_target = target_username.strip().lstrip("@")
-        self.log(f"🚀 Launching Agent Crawl on target: @{clean_target}")
-        self.log(f"Strict Target Limit: {max_accounts} accounts | Keywords: {keywords}")
+        stop_desc = f"{max_accounts} Qualified Leads" if stop_mode == "qualified" else f"{max_accounts} Total Accounts Checked"
+        self.log(f"🚀 Launching Agent Crawl on Target: @{clean_target}")
+        self.log(f"📋 Mode: {mode.upper()} | Target Goal: {stop_desc} | Keywords: {keywords}")
 
         # Record Search History
         initial_counts = get_counts()
@@ -312,29 +306,44 @@ class InstagramAgentEngine:
             qualified_count=initial_counts["qualified"]
         )
 
-        # Step 1: Add target profile to Queue
+        # Step 1: Resolve Target Profile & User ID
+        target_uid = None
+        target_profile = None
         try:
             import instaloader
             target_profile = instaloader.Profile.from_username(self.client.context, clean_target)
             target_uid = str(target_profile.userid)
+            self.log(f"🎯 Target Loaded: @{clean_target} (ID: {target_uid}) | Followers: {target_profile.followers} | Following: {target_profile.followees}")
             add_to_queue(target_uid, clean_target, depth=1)
         except Exception as e:
-            # Resilient fallback: fetch target ID via authenticated Web API or queue directly
+            self.log(f"Target profile fetch notice: {e}. Resolving via Web API...")
             try:
                 s_t = self._authed_session()
                 res_t = s_t.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_target}", timeout=8)
                 if res_t.status_code == 200:
                     u_t = res_t.json().get("data", {}).get("user", {})
                     target_uid = str(u_t.get("id"))
+                    fol_cnt = u_t.get("edge_followed_by", {}).get("count", 0)
+                    fng_cnt = u_t.get("edge_follow", {}).get("count", 0)
+                    self.log(f"🎯 Target Loaded via Web API: @{clean_target} (ID: {target_uid}) | Followers: {fol_cnt} | Following: {fng_cnt}")
                     add_to_queue(target_uid, clean_target, depth=1)
                 else:
-                    add_to_queue(f"id_{clean_target}", clean_target, depth=1)
-            except Exception:
-                add_to_queue(f"id_{clean_target}", clean_target, depth=1)
+                    target_uid = f"id_{clean_target}"
+                    add_to_queue(target_uid, clean_target, depth=1)
+            except Exception as we:
+                self.log(f"Web API notice: {we}")
+                target_uid = f"id_{clean_target}"
+                add_to_queue(target_uid, clean_target, depth=1)
 
         processed_batch_count = 0
 
-        # Step 2: Continuous Loop until MAX LIMIT is STRICTLY REACHED
+        # Helper function to check if goal is reached
+        def is_goal_reached(c: Dict) -> bool:
+            if stop_mode == "qualified":
+                return c["qualified"] >= max_accounts
+            return c["total"] >= max_accounts
+
+        # Step 2: Continuous Crawl Loop
         while self.is_running:
             counts = get_counts()
             save_search_history(
@@ -349,144 +358,120 @@ class InstagramAgentEngine:
                 history_id=history_id
             )
 
-            if counts["total"] >= max_accounts:
-                self.log(f"🎉 SUCCESS! Strictly reached target limit of {max_accounts} accounts!")
+            if is_goal_reached(counts):
+                if stop_mode == "qualified":
+                    self.log(f"🎉 GOAL REACHED! Successfully found {counts['qualified']} Qualified Leads!")
+                else:
+                    self.log(f"🎉 GOAL REACHED! Evaluated target limit of {counts['total']} accounts!")
                 break
 
             queue_item = get_next_queue_item()
             if not queue_item:
-                self.log("⚡ Triggering Multi-Source Web Discovery Engine for target & keywords...")
-                web_discovered = []
-                try:
-                    import requests, re
-                    s_web = requests.Session()
-                    s_web.headers.update({
-                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    })
-                    search_queries = [f"site:instagram.com {clean_target}"] + [f"site:instagram.com {kw}" for kw in keywords]
-                    for sq in search_queries:
-                        if not self.is_running: break
-                        url_ddg = f"https://html.duckduckgo.com/html/?q={sq.replace(' ', '+')}"
-                        r_ddg = s_web.get(url_ddg, timeout=8)
-                        if r_ddg.status_code == 200:
-                            found = re.findall(r'instagram\.com/([a-zA-Z0-9_\.]+)', r_ddg.text)
-                            for u in set(found):
-                                u_c = u.strip().lower()
-                                if u_c not in ['p', 'explore', 'reels', 'stories', 'accounts', 'legal', 'about', 'developer', 'directory', clean_target]:
-                                    web_discovered.append(u_c)
-                except Exception as we:
-                    self.log(f"Web discovery note: {we}")
-
-                if web_discovered:
-                    self.log(f"🔍 Discovered {len(web_discovered)} active target profiles via Web Search!")
-                    for disc_u in web_discovered:
-                        if not self.is_running: break
-                        add_to_queue(f"id_{disc_u}", disc_u, depth=1)
-                    continue
-
-                self.log("Completed all accessible profiles.")
+                self.log(f"✅ Finished scanning all accessible followers/following of target @{clean_target}.")
                 break
 
             curr_username = queue_item["username"]
             curr_user_id = queue_item["user_id"]
             curr_depth = int(queue_item["depth"] or 1)
 
-            # Do not walk deeper than the requested crawl depth
+            # Do not walk deeper than requested crawl depth
             if curr_depth > self.max_depth:
                 mark_queue_status(curr_user_id, "COMPLETED")
                 continue
 
-            self.log(f"Scanning followers/following of @{curr_username} (Level {curr_depth})...")
+            self.log(f"📂 Extracting {mode.upper()} of @{curr_username} (Depth Level {curr_depth})...")
 
+            candidates = []
             try:
-                candidates = []
-                try:
-                    import instaloader
-                    profile = instaloader.Profile.from_username(self.client.context, curr_username)
-                    
-                    if mode in ["followers", "both"]:
-                        try:
-                            for follower in profile.get_followers():
-                                candidates.append((follower.username, str(follower.userid), follower))
-                                if len(candidates) + get_counts()["total"] >= max_accounts:
-                                    break
-                        except Exception as e:
-                            self.log(f"Followers graph note for @{curr_username}: {e}")
-
-                    if mode in ["following", "both"] and (len(candidates) + get_counts()["total"] < max_accounts):
-                        try:
-                            for followee in profile.get_followees():
-                                candidates.append((followee.username, str(followee.userid), followee))
-                                if len(candidates) + get_counts()["total"] >= max_accounts:
-                                    break
-                        except Exception as e:
-                            self.log(f"Following graph note for @{curr_username}: {e}")
-                except Exception as e:
-                    self.log(f"Graph traversal note for @{curr_username}: {e}")
-
-                # Fallback to Multi-Source Discovery if candidates list is empty
-                if not candidates and self.is_running:
-                    self.log(f"⚡ Graph rate-limited. Activating Multi-Source Search for @{curr_username}...")
+                import instaloader
+                profile = instaloader.Profile.from_username(self.client.context, curr_username)
+                
+                # Fetch actual Followers of target account
+                if mode in ["followers", "both"]:
                     try:
-                        import requests, re
-                        s_web = requests.Session()
-                        s_web.headers.update({
-                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        })
-                        sq_list = [f"site:instagram.com {curr_username}"] + [f"site:instagram.com {curr_username} {kw}" for kw in keywords]
-                        for sq in sq_list:
-                            if not self.is_running: break
-                            url_ddg = f"https://html.duckduckgo.com/html/?q={sq.replace(' ', '+')}"
-                            r_ddg = s_web.get(url_ddg, timeout=8)
-                            if r_ddg.status_code == 200:
-                                found = re.findall(r'instagram\.com/([a-zA-Z0-9_\.]+)', r_ddg.text)
-                                for u in set(found):
-                                    u_c = u.strip().lower()
-                                    if u_c not in ['p', 'explore', 'reels', 'stories', 'accounts', 'legal', 'about', 'developer', 'directory', clean_target]:
-                                        candidates.append((u_c, f"id_{u_c}", None))
-                    except Exception as e_ds:
-                        self.log(f"Multi-Source fallback note: {e_ds}")
+                        self.log(f"Fetching followers list of @{curr_username}...")
+                        for follower in profile.get_followers():
+                            candidates.append((follower.username, str(follower.userid), follower))
+                            if is_goal_reached(get_counts()) or len(candidates) >= max_accounts:
+                                break
+                    except Exception as fe:
+                        self.log(f"Followers fetch note for @{curr_username}: {fe}")
 
-                # Evaluate candidate nodes with auto-error recovery
-                for uname, uid, p_obj in candidates:
-                    if not self.is_running:
-                        break
-
-                    while self.is_paused:
-                        self.log("⏸ Crawl Agent is currently PAUSED. Waiting for resume...")
-                        time.sleep(1)
-
-                    if get_counts()["total"] >= max_accounts:
-                        break
-
+                # Fetch actual Following of target account
+                if mode in ["following", "both"] and not is_goal_reached(get_counts()):
                     try:
-                        res = self.process_profile_node(uname, uid, keywords, depth=curr_depth, profile_obj=p_obj)
-                        if res:
-                            processed_batch_count += 1
-                            curr_counts = get_counts()
-                            if progress_callback:
-                                progress_callback(curr_counts)
-
-                            # Anti-bot Random Delay
-                            sleep_time = random.uniform(self.min_delay, self.max_delay)
-                            self.log(f"⏳ Waiting {sleep_time:.1f}s before next profile check... (Total: {curr_counts['total']}/{max_accounts})")
-                            time.sleep(sleep_time)
-
-                            # Batch Cool-down pause
-                            if processed_batch_count % BATCH_SIZE == 0:
-                                cool_down = random.uniform(COOL_DOWN_MIN_SEC, COOL_DOWN_MAX_SEC)
-                                self.log(f"☕ Batch Cool-down break: waiting {cool_down:.1f} seconds to protect account...")
-                                time.sleep(cool_down)
-                    except Exception as err:
-                        self.log(f"Skipping profile @{uname} due to error: {err}")
-                        continue
-
-                mark_queue_status(curr_user_id, "COMPLETED")
+                        self.log(f"Fetching following list of @{curr_username}...")
+                        for followee in profile.get_followees():
+                            candidates.append((followee.username, str(followee.userid), followee))
+                            if is_goal_reached(get_counts()) or len(candidates) >= max_accounts:
+                                break
+                    except Exception as fe:
+                        self.log(f"Following fetch note for @{curr_username}: {fe}")
             except Exception as e:
-                self.log(f"Skipping node @{curr_username}: {e}")
-                mark_queue_status(curr_user_id, "FAILED")
+                self.log(f"Extraction note for @{curr_username}: {e}")
 
-        final_status = "COMPLETED" if get_counts()["total"] >= max_accounts else ("INTERRUPTED" if not self.is_running else "COMPLETED")
+            # Fallback: Try Authenticated REST API for target followers/following
+            if not candidates and self.is_running:
+                try:
+                    s_api = self._authed_session()
+                    endpoint = "followers" if mode == "followers" else "following"
+                    url = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/{endpoint}/?count=50"
+                    res_api = s_api.get(url, timeout=10)
+                    if res_api.status_code == 200:
+                        u_list = res_api.json().get("users", [])
+                        self.log(f"REST API retrieved {len(u_list)} {endpoint} for @{curr_username}")
+                        for u in u_list:
+                            candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
+                    elif res_api.status_code == 401 or "fail" in res_api.text:
+                        self.log(f"⚠️ Instagram rate limit active. Waiting 10s before proceeding...")
+                        time.sleep(10)
+                except Exception as rest_e:
+                    self.log(f"REST API note: {rest_e}")
+
+            if not candidates:
+                self.log(f"No more followers/following accessible for @{curr_username} (Private or restricted).")
+                mark_queue_status(curr_user_id, "COMPLETED")
+                continue
+
+            self.log(f"Found {len(candidates)} candidate profiles from @{curr_username}. Evaluating metadata against keywords...")
+
+            # Evaluate each actual follower/following node
+            for uname, uid, p_obj in candidates:
+                if not self.is_running:
+                    break
+
+                while self.is_paused:
+                    self.log("⏸ Crawl Agent is currently PAUSED. Waiting for resume...")
+                    time.sleep(1)
+
+                if is_goal_reached(get_counts()):
+                    break
+
+                try:
+                    res = self.process_profile_node(uname, uid, keywords, depth=curr_depth, profile_obj=p_obj)
+                    if res:
+                        processed_batch_count += 1
+                        curr_counts = get_counts()
+                        if progress_callback:
+                            progress_callback(curr_counts)
+
+                        # Anti-bot Random Delay
+                        sleep_time = random.uniform(self.min_delay, self.max_delay)
+                        self.log(f"⏳ Next check in {sleep_time:.1f}s... (Total: {curr_counts['total']} | Qualified: {curr_counts['qualified']})")
+                        time.sleep(sleep_time)
+
+                        # Batch Cool-down pause
+                        if processed_batch_count % BATCH_SIZE == 0:
+                            cool_down = random.uniform(COOL_DOWN_MIN_SEC, COOL_DOWN_MAX_SEC)
+                            self.log(f"☕ Batch Cool-down break: waiting {cool_down:.1f} seconds to protect account...")
+                            time.sleep(cool_down)
+                except Exception as err:
+                    self.log(f"Skipping @{uname} due to error: {err}")
+                    continue
+
+            mark_queue_status(curr_user_id, "COMPLETED")
+
+        final_status = "COMPLETED" if is_goal_reached(get_counts()) else ("INTERRUPTED" if not self.is_running else "COMPLETED")
         self.is_running = False
         final_counts = get_counts()
         save_search_history(
@@ -500,5 +485,4 @@ class InstagramAgentEngine:
             qualified_count=final_counts["qualified"],
             history_id=history_id
         )
-        self.log(f"Crawl finished ({final_status}). Total Evaluated: {final_counts['total']} accounts.")
-
+        self.log(f"🏁 Crawl finished ({final_status}). Total Evaluated: {final_counts['total']} | Qualified Leads: {final_counts['qualified']}")
