@@ -230,6 +230,7 @@ if not st.session_state.is_authenticated:
                             eng = InstagramAgentEngine(sessionid=sessionid_input_val)
                             if eng.login():
                                 st.session_state.engine = eng
+                                st.session_state.saved_sessionid = sessionid_input_val.strip()
                                 st.session_state.is_authenticated = True
                                 st.session_state.auth_user = eng.username or "Session Cookie"
                                 st.success("🎉 Connected successfully!")
@@ -253,6 +254,8 @@ if not st.session_state.is_authenticated:
                             with st.spinner("Authenticating with Instagram..."):
                                 eng = InstagramAgentEngine(username=u_val, password=p_val)
                                 st.session_state.engine = eng
+                                st.session_state.saved_username = u_val
+                                st.session_state.saved_password = p_val
                                 login_res = eng.login()
                                 if login_res == "2FA_REQUIRED" or eng.two_factor_required:
                                     st.session_state.awaiting_otp = True
@@ -323,6 +326,9 @@ else:
             st.session_state.is_authenticated = False
             st.session_state.engine = None
             st.session_state.auth_user = ""
+            st.session_state.saved_sessionid = ""
+            st.session_state.saved_username = ""
+            st.session_state.saved_password = ""
             st.rerun()
 
     # Search Configuration Grid
@@ -353,7 +359,7 @@ else:
             speed_option = st.selectbox(
                 "Processing Speed / Delay",
                 ["Fast ⚡ (1.0 - 2.5s)", "Standard ⚖️ (2.0 - 4.0s)", "Safe 🛡️ (4.0 - 8.0s)"],
-                index=0,
+                index=1,
                 label_visibility="collapsed",
                 disabled=inputs_disabled
             )
@@ -367,7 +373,7 @@ else:
         with r2_c4:
             c_kw_in, c_kw_btn = st.columns([3, 1])
             with c_kw_in:
-                new_kw = st.text_input("Add Keyword", placeholder="Type or paste comma-separated...", label_visibility="collapsed", disabled=inputs_disabled)
+                new_kw = st.text_input("Add Keyword", placeholder="Type or paste comma-separated...", label_visibility="collapsed", key="kw_input_field", disabled=inputs_disabled)
                 if new_kw and new_kw.strip():
                     parts = [k.strip().lower() for k in new_kw.split(",") if k.strip()]
                     for p in parts:
@@ -392,22 +398,42 @@ else:
     with col_act1:
         if not st.session_state.is_running:
             if st.button("▶️ Start Search", use_container_width=True, type="primary"):
+                # Collect all active keywords including any currently typed in box
+                final_kws = list(st.session_state.kw_list)
+                if new_kw and new_kw.strip():
+                    for k in new_kw.split(","):
+                        clean_k = k.strip().lower()
+                        if clean_k and clean_k not in final_kws:
+                            final_kws.append(clean_k)
+
                 if not target_username:
                     st.error("Please enter Target Account Username!")
-                elif not st.session_state.kw_list:
+                elif not final_kws:
                     st.error("Please add at least 1 keyword!")
                 else:
+                    # Ensure engine is active
+                    if not st.session_state.engine:
+                        sid_saved = st.session_state.get("saved_sessionid", "")
+                        u_saved = st.session_state.get("saved_username", "")
+                        p_saved = st.session_state.get("saved_password", "")
+                        st.session_state.engine = InstagramAgentEngine(username=u_saved, password=p_saved, sessionid=sid_saved)
+                        st.session_state.engine.login()
+
+                    st.session_state.kw_list = final_kws
                     st.session_state.is_paused = False
                     st.session_state.is_running = True
+                    st.session_state.engine.is_running = True
+                    st.session_state.engine.is_paused = False
+
                     def run_thread():
                         try:
                             st.session_state.engine.run_crawl(
                                 target_username=target_username,
-                                keywords=st.session_state.kw_list,
+                                keywords=final_kws,
                                 max_accounts=max_limit,
                                 mode=search_mode,
                                 max_depth=crawl_depth,
-                                stop_mode="qualified" if stop_mode_sel == "Qualified Goal" else "total",
+                                stop_mode="qualified" if "Qualified" in str(stop_mode_sel) else "total",
                                 min_delay=min_delay_val,
                                 max_delay=max_delay_val
                             )
