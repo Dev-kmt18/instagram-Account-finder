@@ -23,16 +23,17 @@ st.set_page_config(
 # Initialize Database
 init_db()
 
-# Custom Styling (Pure Deep Matte Black Theme - No Blue/Shiny Tint)
+# Custom Styling (High-Contrast Modern Slate Dark Theme)
 st.markdown("""
 <style>
-    /* Pure Matte Deep Black Color Palette */
+    /* Premium High-Contrast Slate Dark Theme */
     :root {
-        --bg-main: #000000;
-        --card-bg: #111111;
-        --border-color: #222222;
+        --bg-main: #0b0f19;
+        --card-bg: #141d2e;
+        --card-sub: #1b263b;
+        --border-color: #2a3b5c;
         --text-main: #ffffff;
-        --text-muted: #888888;
+        --text-muted: #94a3b8;
         --accent: #6366f1;
         --accent-hover: #4f46e5;
     }
@@ -41,68 +42,84 @@ st.markdown("""
         background-color: var(--bg-main) !important;
         color: var(--text-main) !important;
     }
+
+    /* Container Box Styling */
+    div[data-testid="stVerticalBlock"] > div[style*="border"] {
+        border-color: var(--border-color) !important;
+    }
+
+    /* Input Fields Contrast */
+    .stTextInput input, .stNumberInput input, .stSelectbox select {
+        background-color: #162032 !important;
+        color: #ffffff !important;
+        border: 1px solid #2a3b5c !important;
+        border-radius: 6px !important;
+    }
     
     /* Header */
     .app-header {
         margin-bottom: 1.25rem;
+        padding-bottom: 0.8rem;
+        border-bottom: 1px solid #1e293b;
     }
     .app-title {
-        font-size: 1.6rem;
+        font-size: 1.7rem;
         font-weight: 700;
-        color: var(--text-main);
+        color: #ffffff;
         letter-spacing: -0.02em;
     }
     .app-subtitle {
-        font-size: 0.85rem;
-        color: var(--text-muted);
+        font-size: 0.9rem;
+        color: #94a3b8;
         margin-top: 0.2rem;
     }
     
     /* Config Labels */
     .config-header {
-        font-size: 0.75rem;
-        font-weight: 600;
+        font-size: 0.78rem;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--accent);
+        color: #818cf8;
         margin-bottom: 0.5rem;
     }
     
     /* Status Badges */
     .badge {
         display: inline-block;
-        padding: 3px 8px;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 700;
     }
     .badge-qualified {
-        background-color: rgba(16, 185, 129, 0.15);
+        background-color: rgba(16, 185, 129, 0.2);
         color: #34d399;
-        border: 1px solid rgba(16, 185, 129, 0.3);
+        border: 1px solid rgba(16, 185, 129, 0.5);
     }
     .badge-review {
-        background-color: rgba(245, 158, 11, 0.15);
+        background-color: rgba(245, 158, 11, 0.2);
         color: #fbbf24;
-        border: 1px solid rgba(245, 158, 11, 0.3);
+        border: 1px solid rgba(245, 158, 11, 0.5);
     }
     .badge-unqualified {
-        background-color: rgba(107, 114, 128, 0.15);
-        color: #9ca3af;
-        border: 1px solid rgba(107, 114, 128, 0.3);
+        background-color: rgba(107, 114, 128, 0.2);
+        color: #cbd5e1;
+        border: 1px solid rgba(107, 114, 128, 0.4);
     }
     
     /* Keyword Chips */
     .chip-tag {
         display: inline-block;
-        background-color: #222222;
-        color: #e0e0e0;
-        padding: 3px 10px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        margin-right: 5px;
-        margin-bottom: 5px;
-        border: 1px solid #333333;
+        background-color: #1e293b;
+        color: #f1f5f9;
+        padding: 4px 12px;
+        border-radius: 14px;
+        font-size: 0.82rem;
+        font-weight: 500;
+        margin-right: 6px;
+        margin-bottom: 6px;
+        border: 1px solid #334155;
     }
     
     /* Running Cyclist Animation */
@@ -117,22 +134,30 @@ st.markdown("""
         animation: cycleAnim 0.7s infinite ease-in-out;
     }
     .running-cyclist {
-        background: rgba(99, 102, 241, 0.15);
-        color: #818cf8;
-        border: 1px solid rgba(99, 102, 241, 0.4);
-        padding: 6px 14px;
+        background: rgba(99, 102, 241, 0.2);
+        color: #a5b4fc;
+        border: 1px solid rgba(99, 102, 241, 0.6);
+        padding: 6px 16px;
         border-radius: 20px;
-        font-size: 0.85rem;
+        font-size: 0.88rem;
         font-weight: 700;
     }
     .paused-badge {
-        background: rgba(245, 158, 11, 0.15);
-        color: #fbbf24;
-        border: 1px solid rgba(245, 158, 11, 0.4);
-        padding: 6px 14px;
+        background: rgba(245, 158, 11, 0.2);
+        color: #fcd34d;
+        border: 1px solid rgba(245, 158, 11, 0.6);
+        padding: 6px 16px;
         border-radius: 20px;
-        font-size: 0.85rem;
+        font-size: 0.88rem;
         font-weight: 700;
+    }
+
+    /* Metric Cards */
+    div[data-testid="stMetric"] {
+        background: #141d2e;
+        border: 1px solid #2a3b5c;
+        padding: 12px 16px;
+        border-radius: 8px;
     }
 
     /* Hide Default Streamlit Sidebar */
@@ -654,7 +679,7 @@ def render_account_list(accounts_list, tab_key="all"):
             
             with c_check:
                 is_selected = acc['username'] in st.session_state.selected_usernames
-                chk = st.checkbox("", value=is_selected, key=f"chk_{tab_key}_{acc['username']}", label_visibility="collapsed")
+                chk = st.checkbox(f"Select @{acc['username']}", value=is_selected, key=f"chk_{tab_key}_{acc['username']}", label_visibility="collapsed")
                 if chk:
                     st.session_state.selected_usernames.add(acc['username'])
                 else:
@@ -703,11 +728,15 @@ with tab_logs:
 
 # Sync session state with active engine status across background threads
 if st.session_state.engine:
+    was_running = st.session_state.is_running
     st.session_state.is_running = st.session_state.engine.is_running
     st.session_state.is_paused = st.session_state.engine.is_paused
+    if was_running and not st.session_state.is_running:
+        st.rerun()
 
-# Non-blocking auto refresh dashboard if running
-if st.session_state.is_running:
-    st.markdown('<meta http-equiv="refresh" content="3">', unsafe_allow_html=True)
+# Non-blocking auto refresh dashboard while search is actively running
+if st.session_state.is_running and not st.session_state.is_paused:
+    time.sleep(2)
+    st.rerun()
 
 

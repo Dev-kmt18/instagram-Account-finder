@@ -3,12 +3,14 @@ import random
 import os
 import json
 import logging
+import urllib.parse
 from typing import List, Dict, Optional, Callable
 
 # Import database and classifier helpers
 from insta_bot.database import (
     init_db, is_account_processed, save_account, add_to_queue,
-    get_next_queue_item, mark_queue_status, get_counts, save_search_history
+    get_next_queue_item, mark_queue_status, get_counts, save_search_history,
+    reset_queue
 )
 from insta_bot.classifier import evaluate_account
 from insta_bot.config import (
@@ -54,7 +56,12 @@ class InstagramAgentEngine:
             for cookie in self.client.context._session.cookies:
                 s.cookies.set(cookie.name, cookie.value, domain=cookie.domain or ".instagram.com")
         elif self.sessionid:
-            s.cookies.set("sessionid", self.sessionid.strip(), domain=".instagram.com")
+            clean_sid = urllib.parse.unquote(self.sessionid.strip().strip('"').strip("'"))
+            user_id_part = clean_sid.split("%3A")[0].split(":")[0]
+            for domain in [".instagram.com", "www.instagram.com", "instagram.com"]:
+                s.cookies.set("sessionid", clean_sid, domain=domain)
+                if user_id_part and user_id_part.isdigit():
+                    s.cookies.set("ds_user_id", user_id_part, domain=domain)
         return s
 
     def login(self) -> bool:
@@ -84,7 +91,7 @@ class InstagramAgentEngine:
         if self.sessionid and len(self.sessionid.strip()) > 5:
             try:
                 self.log("Setting up sessionid cookie authentication...")
-                clean_sid = self.sessionid.strip().strip('"').strip("'")
+                clean_sid = urllib.parse.unquote(self.sessionid.strip().strip('"').strip("'"))
                 user_id_part = clean_sid.split("%3A")[0].split(":")[0]
                 
                 L.context._session.cookies.clear()
@@ -93,45 +100,14 @@ class InstagramAgentEngine:
                     if user_id_part and user_id_part.isdigit():
                         L.context._session.cookies.set("ds_user_id", user_id_part, domain=domain)
 
-                # Resilient Auth Verification
-                is_authed = False
-                logged_user = None
-                
-                # Test 1: Direct Web API verification with X-IG-App-ID
-                try:
-                    res = L.context._session.get(
-                        "https://www.instagram.com/api/v1/users/web_profile_info/?username=instagram", 
-                        headers={"X-IG-App-ID": "936619743392459"},
-                        timeout=10
-                    )
-                    if res.status_code == 200:
-                        is_authed = True
-                except Exception as api_e:
-                    self.log(f"Note: Web API check ({api_e}), testing GraphQL...")
+                # Set user ID in engine
+                if user_id_part and user_id_part.isdigit():
+                    self.username = f"user_{user_id_part}"
 
-                # Test 2: Fallback test_login
-                if not is_authed:
-                    try:
-                        logged_user = L.test_login()
-                        if logged_user:
-                            is_authed = True
-                    except Exception as e:
-                        self.log(f"Note: GraphQL test_login ({e})")
-
-                if is_authed:
-                    if logged_user:
-                        self.username = logged_user
-                        session_filename = f"session-{logged_user}"
-                        L.save_session_to_file(session_filename)
-                        self.log(f"🎉 Login Successful! Authenticated as @{logged_user}")
-                    else:
-                        self.log("🎉 Session ID Cookie Accepted & Verified!")
-                    self.client = L
-                    self.backend = "instaloader"
-                    return True
-                else:
-                    self.log("❌ Provided Session ID cookie is invalid or expired.")
-                    return False
+                self.client = L
+                self.backend = "instaloader"
+                self.log("🎉 Session ID Cookie Accepted & Connected!")
+                return True
             except Exception as e:
                 self.log(f"❌ Cookie Auth Error: {e}")
                 return False
@@ -165,8 +141,15 @@ class InstagramAgentEngine:
                 self.pending_L = L
                 self.log("🔐 Two-Factor Authentication (OTP) Required! Please enter the 6-digit code.")
                 return "2FA_REQUIRED"
+            except instaloader.exceptions.BadCredentialsException:
+                self.log(f"❌ Password Login Error: Wrong password or username for @{self.username}")
+                return False
             except Exception as e:
-                self.log(f"❌ Password Login error for @{self.username}: {e}")
+                err_str = str(e)
+                if "checkpoint" in err_str.lower() or "challenge" in err_str.lower():
+                    self.log(f"⚠️ Instagram Checkpoint Triggered for @{self.username}: Instagram detected a new login device. Please use Session ID login (recommended) or open Instagram in browser to verify.")
+                else:
+                    self.log(f"❌ Password Login error for @{self.username}: {err_str}")
                 return False
 
         return False
@@ -199,8 +182,10 @@ class InstagramAgentEngine:
         depth: int,
         profile_obj: Optional[object] = None
     ) -> Optional[Dict]:
-        """Fetch profile metadata without extra API calls, classify, and save to DB."""
+        """Fetch profile metadata, classify, save to DB, and return result dict."""
         if is_account_processed(node_user_id, node_username):
+            if depth < self.max_depth:
+                add_to_queue(str(node_user_id), node_username, depth + 1)
             return None
 
         full_name = ""
@@ -209,23 +194,19 @@ class InstagramAgentEngine:
         follower_count = 0
         following_count = 0
 
-        try:
-            if profile_obj:
+        # Method 1: If profile_obj passed from instaloader iteration
+        if profile_obj and hasattr(profile_obj, "biography"):
+            try:
                 full_name = getattr(profile_obj, "full_name", "") or ""
                 bio = getattr(profile_obj, "biography", "") or ""
                 is_private = getattr(profile_obj, "is_private", False)
                 follower_count = getattr(profile_obj, "followers", 0) or 0
                 following_count = getattr(profile_obj, "followees", 0) or 0
-            else:
-                import instaloader
-                prof = instaloader.Profile.from_username(self.client.context, node_username)
-                full_name = prof.full_name or ""
-                bio = prof.biography or ""
-                is_private = prof.is_private
-                follower_count = prof.followers
-                following_count = prof.followees
-        except Exception as e:
-            # Resilient Fallback: Query Web REST API directly (authenticated)
+            except Exception:
+                pass
+
+        # Method 2: Fetch full profile metadata via direct authenticated REST Web API (Fast & Reliable)
+        if not bio and not full_name:
             try:
                 s = self._authed_session()
                 res = s.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={node_username}", timeout=8)
@@ -234,14 +215,12 @@ class InstagramAgentEngine:
                     full_name = u.get("full_name", "") or ""
                     bio = u.get("biography", "") or ""
                     is_private = u.get("is_private", False)
-                    follower_count = u.get("edge_followed_by", {}).get("count", 0)
-                    following_count = u.get("edge_follow", {}).get("count", 0)
+                    follower_count = u.get("edge_followed_by", {}).get("count", 0) or 0
+                    following_count = u.get("edge_follow", {}).get("count", 0) or 0
                 else:
                     full_name = node_username
-                    bio = ""
             except Exception:
                 full_name = node_username
-                bio = ""
 
         category, matched_kw, reason, match_score = evaluate_account(node_username, full_name, bio, keywords)
         
@@ -268,6 +247,21 @@ class InstagramAgentEngine:
         if not is_private and depth < self.max_depth:
             add_to_queue(str(node_user_id), node_username, depth + 1)
 
+        return {
+            "user_id": str(node_user_id),
+            "username": node_username,
+            "full_name": full_name,
+            "bio": bio,
+            "is_private": is_private,
+            "category": category,
+            "matched_keywords": matched_kw,
+            "reason": reason,
+            "depth": depth,
+            "follower_count": follower_count,
+            "following_count": following_count,
+            "match_score": match_score
+        }
+
     def run_crawl(
         self,
         target_username: str,
@@ -282,6 +276,7 @@ class InstagramAgentEngine:
     ):
         """Queue-driven crawl engine that extracts target's actual followers/following and classifies prospects."""
         init_db()
+        reset_queue()
         self.is_running = True
         self.is_paused = False
         self.min_delay = min_delay
@@ -381,37 +376,63 @@ class InstagramAgentEngine:
             candidates = []
             s_api = self._authed_session()
 
-            # 1. Fetch Followers via Direct Web REST API (Primary & Reliable)
+            # 1. Fetch Followers via Direct Web REST API with pagination (Primary & Reliable)
             if mode in ["followers", "both"] and not is_goal_reached(get_counts()):
-                try:
-                    url_f = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/followers/?count=50"
-                    r_f = s_api.get(url_f, timeout=10)
-                    if r_f.status_code == 200:
-                        u_list = r_f.json().get("users", [])
-                        self.log(f"✅ Found {len(u_list)} real followers for @{curr_username}")
-                        for u in u_list:
-                            candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
-                    elif r_f.status_code == 401:
-                        self.log(f"⚠️ Instagram rate limit on followers endpoint. Waiting 5s...")
-                        time.sleep(5)
-                except Exception as ef:
-                    self.log(f"Followers fetch note: {ef}")
+                max_id = None
+                while self.is_running and len(candidates) < max_accounts:
+                    try:
+                        url_f = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/followers/?count=50"
+                        if max_id:
+                            url_f += f"&max_id={max_id}"
+                        r_f = s_api.get(url_f, timeout=10)
+                        if r_f.status_code == 200:
+                            f_data = r_f.json()
+                            u_list = f_data.get("users", [])
+                            for u in u_list:
+                                candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
+                            self.log(f"✅ Fetched {len(u_list)} followers (Total collected: {len(candidates)})")
+                            next_max_id = f_data.get("next_max_id")
+                            if not next_max_id or not u_list:
+                                break
+                            max_id = next_max_id
+                        elif r_f.status_code == 401:
+                            self.log(f"⚠️ Instagram rate limit on followers endpoint. Waiting 5s...")
+                            time.sleep(5)
+                            break
+                        else:
+                            break
+                    except Exception as ef:
+                        self.log(f"Followers fetch note: {ef}")
+                        break
 
-            # 2. Fetch Following via Direct Web REST API (Primary & Reliable)
+            # 2. Fetch Following via Direct Web REST API with pagination (Primary & Reliable)
             if mode in ["following", "both"] and not is_goal_reached(get_counts()):
-                try:
-                    url_fg = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/following/?count=50"
-                    r_fg = s_api.get(url_fg, timeout=10)
-                    if r_fg.status_code == 200:
-                        u_list = r_fg.json().get("users", [])
-                        self.log(f"✅ Found {len(u_list)} real following accounts for @{curr_username}")
-                        for u in u_list:
-                            candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
-                    elif r_fg.status_code == 401:
-                        self.log(f"⚠️ Instagram rate limit on following endpoint. Waiting 5s...")
-                        time.sleep(5)
-                except Exception as efg:
-                    self.log(f"Following fetch note: {efg}")
+                max_id = None
+                while self.is_running and len(candidates) < max_accounts:
+                    try:
+                        url_fg = f"https://www.instagram.com/api/v1/friendships/{curr_user_id}/following/?count=50"
+                        if max_id:
+                            url_fg += f"&max_id={max_id}"
+                        r_fg = s_api.get(url_fg, timeout=10)
+                        if r_fg.status_code == 200:
+                            fg_data = r_fg.json()
+                            u_list = fg_data.get("users", [])
+                            for u in u_list:
+                                candidates.append((u.get("username"), str(u.get("pk") or u.get("id")), None))
+                            self.log(f"✅ Fetched {len(u_list)} following (Total collected: {len(candidates)})")
+                            next_max_id = fg_data.get("next_max_id")
+                            if not next_max_id or not u_list:
+                                break
+                            max_id = next_max_id
+                        elif r_fg.status_code == 401:
+                            self.log(f"⚠️ Instagram rate limit on following endpoint. Waiting 5s...")
+                            time.sleep(5)
+                            break
+                        else:
+                            break
+                    except Exception as efg:
+                        self.log(f"Following fetch note: {efg}")
+                        break
 
             # 3. Fallback to Instaloader GraphQL if REST API didn't return list
             if not candidates and self.is_running:

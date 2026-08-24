@@ -233,14 +233,25 @@ def delete_search_history_item(history_id: int) -> bool:
     finally:
         conn.close()
 
+def reset_queue():
+    """Clear all items from the crawling queue for a fresh crawl session."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM queue")
+    conn.commit()
+    conn.close()
+
 def add_to_queue(user_id: str, username: str, depth: int) -> bool:
-    """Add profile to traversal queue."""
+    """Add profile to traversal queue or reset status to PENDING if re-queued."""
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT OR IGNORE INTO queue (user_id, username, depth, status)
+            INSERT INTO queue (user_id, username, depth, status)
             VALUES (?, ?, ?, 'PENDING')
+            ON CONFLICT(user_id) DO UPDATE SET
+                depth = excluded.depth,
+                status = 'PENDING'
         """, (str(user_id), str(username), depth))
         conn.commit()
         return True

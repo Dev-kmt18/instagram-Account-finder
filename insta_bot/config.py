@@ -18,4 +18,4 @@ COOL_DOWN_MAX_SEC = 15   # 15 seconds cool-down
 
 # Classification Thresholds (Fuzzy matching 0-100)
 QUALIFIED_SCORE_THRESHOLD = 80
-DOUBTFUL_SCORE_THRESHOLD = 45
+DOUBTFUL_SCORE_THRESHOLD = 65
