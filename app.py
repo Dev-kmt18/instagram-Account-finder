@@ -24,7 +24,7 @@ st.set_page_config(
 # Initialize Database (WAL mode & auto-migrations)
 init_db()
 
-# Custom Styling (Pure Dark Theme with Dark Red Accent & Ultra-Compact Table Aesthetics)
+# Custom Styling (Pure Dark Theme, Google Sheets Data Grid Aesthetics & Clean Enterprise UI)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
@@ -34,7 +34,7 @@ st.markdown("""
         --bg-surface: #0D0E12;
         --bg-surface-elevated: #13161D;
         --bg-input: #080A0E;
-        --border-subtle: rgba(255, 255, 255, 0.07);
+        --border-subtle: rgba(255, 255, 255, 0.08);
         --border-hover: rgba(185, 28, 28, 0.5);
         --text-primary: #E2E8F0;
         --text-secondary: #94A3B8;
@@ -148,9 +148,9 @@ st.markdown("""
     .badge {
         display: inline-flex;
         align-items: center;
-        padding: 3px 9px;
+        padding: 2px 7px;
         border-radius: 4px;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
@@ -207,7 +207,7 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
 
-    /* STICKY RUNNING STATUS INDICATOR WITH CYCLIST ANIMATION (STAYS VISIBLE ON SCROLL) */
+    /* STICKY RUNNING STATUS INDICATOR WITH ANIMATED CYCLIST (STAYS VISIBLE ON SCROLL) */
     .sticky-running-indicator {
         position: fixed;
         top: 12px;
@@ -262,16 +262,30 @@ st.markdown("""
         margin-top: 4px;
     }
 
-    /* Ultra-Compact Table Layout Rules */
-    .compact-table-row {
-        background: var(--bg-surface);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        padding: 6px 10px;
-        margin-bottom: 4px;
-        border-radius: 4px;
+    /* Google Sheets Spreadsheet Data Grid Styling */
+    .sheet-grid-header {
+        background-color: #161B22 !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        padding: 5px 8px !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        color: #94A3B8 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
     }
-    .compact-table-row:hover {
-        background: var(--bg-surface-elevated);
+    .sheet-grid-cell {
+        background-color: #0A0C10 !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        padding: 4px 8px !important;
+        font-size: 0.82rem !important;
+        color: #E2E8F0 !important;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+    }
+    .sheet-grid-row:hover .sheet-grid-cell {
+        background-color: #13161D !important;
+        border-color: rgba(185, 28, 28, 0.3) !important;
     }
 
     /* Primary vs Ghost Buttons */
@@ -625,7 +639,7 @@ else:
 
                     val_max_limit = st.session_state.get("cfg_max_limit", 1000)
                     val_crawl_depth = st.session_state.get("cfg_crawl_depth", 1)
-                    val_match_logic = st.session_state.get("cfg_match_logic", "OR")
+                    val_match_logic = "AND" if "ALL" in str(st.session_state.get("cfg_match_logic", "")) else "OR"
                     val_stop_mode = "qualified" if "Qualified" in str(st.session_state.get("cfg_stop_mode", "")) else "total"
                     val_min_f = st.session_state.get("cfg_min_followers", 0)
                     val_max_f = st.session_state.get("cfg_max_followers", 0)
@@ -680,11 +694,11 @@ else:
             st.text_input("Add Target Keyword", placeholder="Type keyword and press Enter (e.g. mbbs, kolkata)...", key="kw_input_field", on_change=on_add_kw, disabled=inputs_disabled)
             
             if st.session_state.kw_list:
-                st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); font-weight:700; margin-top:6px; margin-bottom:4px; text-transform:uppercase;'>Active Target Keywords:</div>", unsafe_allow_html=True)
-                chip_cols = st.columns(min(len(st.session_state.kw_list), 6))
+                st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); font-weight:700; margin-top:8px; margin-bottom:6px; text-transform:uppercase;'>Active Target Keywords:</div>", unsafe_allow_html=True)
+                chip_cols = st.columns(8)
                 for idx, kw in enumerate(list(st.session_state.kw_list)):
-                    c_idx = idx % min(len(st.session_state.kw_list), 6)
-                    if chip_cols[c_idx].button(f"{kw}  ✕", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
+                    c_idx = idx % 8
+                    if chip_cols[c_idx].button(f"{kw} ✕", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
                         st.session_state.kw_list.remove(kw)
                         st.rerun()
                 
@@ -695,9 +709,9 @@ else:
             recent_to_show = [rk for rk in st.session_state.recent_keywords if rk not in st.session_state.kw_list]
             if recent_to_show:
                 st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); margin-top:8px;'>Quick Re-Add Recent:</div>", unsafe_allow_html=True)
-                rec_cols = st.columns(min(len(recent_to_show), 6))
-                for idx, rkw in enumerate(recent_to_show[:6]):
-                    c_idx = idx % min(len(recent_to_show), 6)
+                rec_cols = st.columns(8)
+                for idx, rkw in enumerate(recent_to_show[:8]):
+                    c_idx = idx % 8
                     if rec_cols[c_idx].button(f"+ {rkw}", key=f"add_rec_kw_{idx}_{rkw}", disabled=inputs_disabled):
                         st.session_state.kw_list.append(rkw)
                         st.rerun()
@@ -711,7 +725,7 @@ else:
             with cfg_l3:
                 crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1, key="cfg_crawl_depth", disabled=inputs_disabled, help="Level 1: Scans direct Followers or Following of the target account.\nLevel 2: Scans direct Followers/Following PLUS deep-scans followers of all qualified profiles found!")
             with cfg_l4:
-                match_logic = st.selectbox("Matching Logic", ["OR", "AND"], index=0, key="cfg_match_logic", disabled=inputs_disabled, help="OR Mode: Qualified if ANY target keyword is found in bio.\nAND Mode: Qualified only if ALL target keywords are present together in bio.")
+                match_logic = st.selectbox("Matching Logic Mode", ["Match ANY Keyword (Flex Mode)", "Match ALL Keywords (Strict Mode)"], index=0, key="cfg_match_logic", disabled=inputs_disabled, help="Match ANY Keyword: Qualified if any 1 target keyword is in bio.\nMatch ALL Keywords: Qualified only if all target keywords are in bio.")
 
         with tab_cfg_filters:
             cfg_f1, cfg_f2, cfg_f3 = st.columns(3)
@@ -740,10 +754,10 @@ else:
             
             if st.session_state.neg_kw_list:
                 st.markdown("<div style='font-size:0.72rem; color:#F87171; font-weight:700; margin-top:4px; text-transform:uppercase;'>Active Blacklist Words:</div>", unsafe_allow_html=True)
-                neg_chip_cols = st.columns(min(len(st.session_state.neg_kw_list), 6))
+                neg_chip_cols = st.columns(8)
                 for idx, kw in enumerate(list(st.session_state.neg_kw_list)):
-                    c_idx = idx % min(len(st.session_state.neg_kw_list), 6)
-                    if neg_chip_cols[c_idx].button(f"{kw}  ✕", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
+                    c_idx = idx % 8
+                    if neg_chip_cols[c_idx].button(f"{kw} ✕", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
                         st.session_state.neg_kw_list.remove(kw)
                         st.rerun()
                 
@@ -777,9 +791,7 @@ else:
 
     with ctrl_col3:
         if st.button("Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
-            clear_database()
-            st.session_state.selected_usernames.clear()
-            st.rerun()
+            confirm_clear_all_dialog()
 
     with ctrl_col4:
         if st.button("Refresh Data", use_container_width=True):
@@ -915,8 +927,22 @@ with f_col7:
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 6. MODAL DIALOGS (ACCOUNT DETAILS & DELETION)
+# 6. MODAL DIALOGS (ACCOUNT DETAILS, DATA RESET & DELETION)
 # ---------------------------------------------------------
+@st.dialog("Confirm Data Reset")
+def confirm_clear_all_dialog():
+    st.markdown("### Warning: Permanently Reset All Data?")
+    st.write("Are you sure you want to delete all evaluated accounts, queues, and search history?")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Yes, Clear Everything", type="primary", use_container_width=True):
+            clear_database()
+            st.session_state.selected_usernames.clear()
+            st.rerun()
+    with c2:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
+
 @st.dialog("Account Details")
 def show_account_details_dialog(acc):
     st.markdown(f"### @{acc['username']}")
@@ -985,7 +1011,7 @@ def confirm_batch_delete_dialog(usernames):
             st.rerun()
 
 # ---------------------------------------------------------
-# 7. ULTRA-COMPACT STRUCTURED TABLE RESULTS UI
+# 7. GOOGLE SHEETS SPREADSHEET GRID RESULTS UI
 # ---------------------------------------------------------
 tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "All Results",
@@ -1013,22 +1039,20 @@ def render_account_list(accounts_list, tab_key="all"):
         if st.button(f"Delete Selected ({num_sel})", disabled=num_sel == 0, key=f"btn_del_sel_{tab_key}", use_container_width=True):
             confirm_batch_delete_dialog(list(st.session_state.selected_usernames))
 
-    # Structured Table Header Row
+    # Google Sheets Spreadsheet Grid Table Header
     t_h1, t_h2, t_h3, t_h4, t_h5 = st.columns([0.4, 3.4, 1.4, 0.8, 1.6])
     with t_h1:
-        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>SEL</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sheet-grid-header'>SEL</div>", unsafe_allow_html=True)
     with t_h2:
-        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>ACCOUNT NAME</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sheet-grid-header'>ACCOUNT USERNAME & NAME</div>", unsafe_allow_html=True)
     with t_h3:
-        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>CATEGORY</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sheet-grid-header'>CATEGORY STATUS</div>", unsafe_allow_html=True)
     with t_h4:
-        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>MATCH</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sheet-grid-header'>MATCH</div>", unsafe_allow_html=True)
     with t_h5:
-        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>ACTIONS</div>", unsafe_allow_html=True)
-    
-    st.markdown("<div style='border-bottom: 1px solid var(--border-subtle); margin-bottom: 6px; margin-top: 4px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sheet-grid-header'>ACTIONS</div>", unsafe_allow_html=True)
 
-    # Ultra-Compact Table Rows (Zero Extra Vertical Spacing)
+    # Google Sheets Grid Rows
     for acc in accounts_list:
         cat = acc["category"]
         if cat == "QUALIFIED":
@@ -1053,13 +1077,13 @@ def render_account_list(accounts_list, tab_key="all"):
 
             with c_user:
                 full_name_str = f" <span style='color:#64748B; font-size:0.8rem;'>({acc['full_name']})</span>" if acc['full_name'] else ""
-                st.markdown(f"**@{acc['username']}**{full_name_str}", unsafe_allow_html=True)
+                st.markdown(f"<div class='sheet-grid-cell'><b>@{acc['username']}</b>{full_name_str}</div>", unsafe_allow_html=True)
 
             with c_stat:
-                st.markdown(badge_html, unsafe_allow_html=True)
+                st.markdown(f"<div class='sheet-grid-cell'>{badge_html}</div>", unsafe_allow_html=True)
 
             with c_score:
-                st.markdown(f"<span style='font-family:\"JetBrains Mono\", monospace; font-weight:700; font-size:0.85rem; color:#F8FAFC;'>{score_val:.0f}%</span>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sheet-grid-cell'><span style='font-family:\"JetBrains Mono\", monospace; font-weight:700; color:#F8FAFC;'>{score_val:.0f}%</span></div>", unsafe_allow_html=True)
 
             with c_actions:
                 ac1, ac2 = st.columns([1, 1])

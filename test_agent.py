@@ -64,6 +64,7 @@ def test_database():
     history = get_search_history()
     assert len(history) == 1
     delete_search_history_item(hid)
+    clear_database()
     print("✅ Search History Persistence Test Passed!")
 
 if __name__ == "__main__":
