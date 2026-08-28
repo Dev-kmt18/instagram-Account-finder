@@ -115,6 +115,35 @@ st.markdown("""
         box-shadow: 0 0 0 2px var(--accent-glow) !important;
     }
 
+    /* Enhanced Custom Selectbox & Dropdown Menu Styling */
+    div[data-baseweb="select"] > div {
+        background-color: var(--bg-input) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 6px !important;
+        color: var(--text-primary) !important;
+        font-size: 0.88rem !important;
+    }
+    div[data-baseweb="select"] > div:hover {
+        border-color: var(--accent-hover) !important;
+    }
+    div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
+        background-color: #0D0E12 !important;
+        border: 1px solid rgba(185, 28, 28, 0.5) !important;
+        border-radius: 6px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85) !important;
+        z-index: 999999 !important;
+    }
+    li[role="option"] {
+        background-color: #0D0E12 !important;
+        color: #E2E8F0 !important;
+        padding: 8px 12px !important;
+        font-size: 0.85rem !important;
+    }
+    li[role="option"]:hover, li[aria-selected="true"] {
+        background-color: #8B0000 !important;
+        color: #FFFFFF !important;
+    }
+
     /* Status Badges */
     .badge {
         display: inline-flex;
@@ -537,7 +566,7 @@ else:
     hero_c1, hero_c2, hero_c3 = st.columns([2.5, 1.5, 1.5])
     
     with hero_c1:
-        target_username = st.text_input("Target Account Username", placeholder="e.g. pawan_kmt18", disabled=inputs_disabled)
+        target_username = st.text_input("Target Account Username", placeholder="e.g. instagram_username", disabled=inputs_disabled)
     with hero_c2:
         search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, disabled=inputs_disabled)
     with hero_c3:
@@ -676,13 +705,13 @@ else:
         with tab_cfg_limits:
             cfg_l1, cfg_l2, cfg_l3, cfg_l4 = st.columns(4)
             with cfg_l1:
-                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000, value=1000, step=50, key="cfg_max_limit", disabled=inputs_disabled)
+                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000000, value=1000, step=100, key="cfg_max_limit", disabled=inputs_disabled, help="Set any target limit count without restriction (e.g. 5,000, 50,000, or 10,000,000)...")
             with cfg_l2:
-                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, key="cfg_stop_mode", disabled=inputs_disabled)
+                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, key="cfg_stop_mode", disabled=inputs_disabled, help="Total Scanned: Stops after checking N total accounts.\nQualified Goal: Keeps searching until N Qualified Leads are found.")
             with cfg_l3:
-                crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1, key="cfg_crawl_depth", disabled=inputs_disabled)
+                crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1, key="cfg_crawl_depth", disabled=inputs_disabled, help="Level 1: Scans direct Followers or Following of the target account.\nLevel 2: Scans direct Followers/Following PLUS deep-scans followers of all qualified profiles found!")
             with cfg_l4:
-                match_logic = st.selectbox("Matching Logic", ["OR", "AND"], index=0, key="cfg_match_logic", disabled=inputs_disabled)
+                match_logic = st.selectbox("Matching Logic", ["OR", "AND"], index=0, key="cfg_match_logic", disabled=inputs_disabled, help="OR Mode: Qualified if ANY target keyword is found in bio.\nAND Mode: Qualified only if ALL target keywords are present together in bio.")
 
         with tab_cfg_filters:
             cfg_f1, cfg_f2, cfg_f3 = st.columns(3)
