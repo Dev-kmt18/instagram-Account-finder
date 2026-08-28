@@ -1,6 +1,8 @@
 venv/
 *.db
-insta_agent.db
+*.db-shm
+*.db-wal
+insta_agent.db*
 session-*
 session.json
 exports/

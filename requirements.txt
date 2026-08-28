@@ -1,5 +1,6 @@
-instagraapi
+instaloader
 streamlit
+streamlit-autorefresh
 pandas
 openpyxl
 rapidfuzz

@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import threading
 import time
@@ -7,10 +8,14 @@ import os
 
 from insta_bot.database import (
     init_db, get_counts, get_filtered_accounts,
-    update_account_category, delete_account, clear_database
+    update_account_category, delete_account, clear_database,
+    get_pending_queue_count, get_search_history
 )
 from insta_bot.scraper import InstagramAgentEngine
 from insta_bot.config import MIN_DELAY_PER_PROFILE, MAX_DELAY_PER_PROFILE
+
+# Top-level Vercel Python entrypoint export compatibility
+app = application = handler = None
 
 # Page Configuration
 st.set_page_config(
@@ -20,149 +25,237 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Initialize Database
+# Initialize Database (WAL mode & auto-migrations)
 init_db()
 
-# Custom Styling (High-Contrast Modern Slate Dark Theme)
+# Custom Styling (Refined Graphite Dark Theme inspired by Linear/Vercel)
 st.markdown("""
 <style>
-    /* Premium High-Contrast Slate Dark Theme */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
     :root {
-        --bg-main: #0b0f19;
-        --card-bg: #141d2e;
-        --card-sub: #1b263b;
-        --border-color: #2a3b5c;
-        --text-main: #ffffff;
-        --text-muted: #94a3b8;
-        --accent: #6366f1;
-        --accent-hover: #4f46e5;
+        --bg-base: #0E1015;
+        --bg-surface: #151821;
+        --bg-surface-elevated: #1B1E29;
+        --bg-input: #12141C;
+        --border-subtle: rgba(255, 255, 255, 0.08);
+        --border-hover: rgba(91, 110, 245, 0.4);
+        --text-primary: #F1F5F9;
+        --text-secondary: #94A3B8;
+        --text-muted: #64748B;
+        --accent: #5B6EF5;
+        --accent-hover: #4C5EE8;
+        --accent-glow: rgba(91, 110, 245, 0.2);
     }
     
     body, .stApp {
-        background-color: var(--bg-main) !important;
-        color: var(--text-main) !important;
+        background-color: var(--bg-base) !important;
+        color: var(--text-primary) !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
-    /* Container Box Styling */
-    div[data-testid="stVerticalBlock"] > div[style*="border"] {
-        border-color: var(--border-color) !important;
-    }
-
-    /* Input Fields Contrast */
-    .stTextInput input, .stNumberInput input, .stSelectbox select {
-        background-color: #162032 !important;
-        color: #ffffff !important;
-        border: 1px solid #2a3b5c !important;
-        border-radius: 6px !important;
-    }
-    
-    /* Header */
-    .app-header {
-        margin-bottom: 1.25rem;
-        padding-bottom: 0.8rem;
-        border-bottom: 1px solid #1e293b;
-    }
-    .app-title {
-        font-size: 1.7rem;
-        font-weight: 700;
-        color: #ffffff;
-        letter-spacing: -0.02em;
-    }
-    .app-subtitle {
-        font-size: 0.9rem;
-        color: #94a3b8;
-        margin-top: 0.2rem;
-    }
-    
-    /* Config Labels */
-    .config-header {
-        font-size: 0.78rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #818cf8;
-        margin-bottom: 0.5rem;
-    }
-    
-    /* Status Badges */
-    .badge {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: 700;
-    }
-    .badge-qualified {
-        background-color: rgba(16, 185, 129, 0.2);
-        color: #34d399;
-        border: 1px solid rgba(16, 185, 129, 0.5);
-    }
-    .badge-review {
-        background-color: rgba(245, 158, 11, 0.2);
-        color: #fbbf24;
-        border: 1px solid rgba(245, 158, 11, 0.5);
-    }
-    .badge-unqualified {
-        background-color: rgba(107, 114, 128, 0.2);
-        color: #cbd5e1;
-        border: 1px solid rgba(107, 114, 128, 0.4);
-    }
-    
-    /* Keyword Chips */
-    .chip-tag {
-        display: inline-block;
-        background-color: #1e293b;
-        color: #f1f5f9;
-        padding: 4px 12px;
-        border-radius: 14px;
-        font-size: 0.82rem;
-        font-weight: 500;
-        margin-right: 6px;
-        margin-bottom: 6px;
-        border: 1px solid #334155;
-    }
-    
-    /* Running Cyclist Animation */
-    @keyframes cycleAnim {
-        0% { transform: translateX(0px); }
-        50% { transform: translateX(8px); }
-        100% { transform: translateX(0px); }
-    }
-    .cyclist-icon {
-        display: inline-block;
-        font-size: 1.2rem;
-        animation: cycleAnim 0.7s infinite ease-in-out;
-    }
-    .running-cyclist {
-        background: rgba(99, 102, 241, 0.2);
-        color: #a5b4fc;
-        border: 1px solid rgba(99, 102, 241, 0.6);
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 0.88rem;
-        font-weight: 700;
-    }
-    .paused-badge {
-        background: rgba(245, 158, 11, 0.2);
-        color: #fcd34d;
-        border: 1px solid rgba(245, 158, 11, 0.6);
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 0.88rem;
-        font-weight: 700;
-    }
-
-    /* Metric Cards */
-    div[data-testid="stMetric"] {
-        background: #141d2e;
-        border: 1px solid #2a3b5c;
-        padding: 12px 16px;
-        border-radius: 8px;
-    }
-
-    /* Hide Default Streamlit Sidebar */
+    /* Hide Sidebar */
     [data-testid="stSidebar"] {
         display: none;
+    }
+
+    /* Tabular Numbers for Stats & Monospace Text */
+    .stat-value, [data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+
+    /* Header Component Styling */
+    .app-header {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .app-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #F8FAFC;
+        letter-spacing: -0.025em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .app-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    /* Section Card Containers */
+    .hero-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .section-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* Custom Input Controls Styling */
+    .stTextInput input, .stNumberInput input, .stSelectbox select {
+        background-color: var(--bg-input) !important;
+        color: var(--text-primary) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 8px !important;
+        font-size: 0.9rem !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    }
+    .stTextInput input:focus, .stNumberInput input:focus, .stSelectbox select:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 2px var(--accent-glow) !important;
+    }
+
+    /* Status Badges */
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+    .badge-qualified {
+        background-color: rgba(16, 185, 129, 0.12);
+        color: #34D399;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-review {
+        background-color: rgba(245, 158, 11, 0.12);
+        color: #FBBF24;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .badge-unqualified {
+        background-color: rgba(239, 68, 68, 0.12);
+        color: #FCA5A5;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .badge-contact {
+        background-color: rgba(91, 110, 245, 0.12);
+        color: #818CF8;
+        border: 1px solid rgba(91, 110, 245, 0.3);
+        font-size: 0.75rem;
+        padding: 2px 8px;
+    }
+
+    /* Agent Status Badges */
+    .running-cyclist {
+        background: rgba(91, 110, 245, 0.15);
+        color: #818CF8;
+        border: 1px solid rgba(91, 110, 245, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .paused-badge {
+        background: rgba(245, 158, 11, 0.15);
+        color: #FCD34D;
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+
+    /* Unified Stat Bar */
+    .stat-bar {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 16px 20px;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin-bottom: 1.25rem;
+    }
+    .stat-item {
+        padding-right: 12px;
+        border-right: 1px solid var(--border-subtle);
+    }
+    .stat-item:last-child {
+        border-right: none;
+    }
+    .stat-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #F8FAFC;
+        line-height: 1.2;
+    }
+    .stat-title {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
+    /* Lead Card Container with Hover State */
+    .lead-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
+        padding: 16px 18px;
+        margin-bottom: 10px;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .lead-card:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-1px);
+    }
+
+    /* Custom Button Overrides for Primary vs Ghost Actions */
+    div.stButton > button[kind="primary"] {
+        background-color: var(--accent) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 12px var(--accent-glow) !important;
+        transition: all 0.15s ease !important;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: var(--accent-hover) !important;
+        box-shadow: 0 6px 16px rgba(91, 110, 245, 0.35) !important;
+    }
+
+    div.stButton > button[kind="secondary"] {
+        background-color: var(--bg-surface-elevated) !important;
+        color: var(--text-primary) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        transition: all 0.15s ease !important;
+    }
+    div.stButton > button[kind="secondary"]:hover {
+        border-color: var(--border-hover) !important;
+        color: #FFFFFF !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -181,49 +274,60 @@ if "is_authenticated" not in st.session_state:
 if "auth_user" not in st.session_state:
     st.session_state.auth_user = ""
 if "kw_list" not in st.session_state:
-    st.session_state.kw_list = ["fitness", "coach", "trainer", "gym"]
+    st.session_state.kw_list = []
+if "neg_kw_list" not in st.session_state:
+    st.session_state.neg_kw_list = []
+if "recent_keywords" not in st.session_state:
+    st.session_state.recent_keywords = []
 if "selected_usernames" not in st.session_state:
     st.session_state.selected_usernames = set()
 if "awaiting_otp" not in st.session_state:
     st.session_state.awaiting_otp = False
+if "selected_search_id" not in st.session_state:
+    st.session_state.selected_search_id = None
 
-# Synchronize session state with backend engine actively
+# Synchronize state with background engine actively
 if st.session_state.engine:
     st.session_state.is_running = st.session_state.engine.is_running
     st.session_state.is_paused = st.session_state.engine.is_paused
 
-# Inputs are disabled ONLY when engine is actively running and NOT paused
+# Reactivity Engine: Refresh automatically EVERY 2.5 seconds WITHOUT UI Freeze while crawling
+if st.session_state.is_running and not st.session_state.is_paused:
+    st_autorefresh(interval=2500, limit=None, key="crawl_auto_refresh")
+
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 
 # ---------------------------------------------------------
-# 1. HEADER WITH RUNNING CYCLIST ANIMATION
+# 1. HEADER
 # ---------------------------------------------------------
 status_badge_html = ""
 if st.session_state.is_running and not st.session_state.is_paused:
-    status_badge_html = '<span class="running-cyclist"><span class="cyclist-icon">🚴💨</span> Agent Active & Scanning...</span>'
+    status_badge_html = '<span class="running-cyclist">⚡ Agent Active & Scanning...</span>'
 elif st.session_state.is_running and st.session_state.is_paused:
-    status_badge_html = '<span class="paused-badge">⏸ Agent Paused (Editing Allowed)</span>'
+    status_badge_html = '<span class="paused-badge">⏸ Agent Paused</span>'
 
 st.markdown(
     f'<div class="app-header">'
-    f'<div style="float: right;">{status_badge_html}</div>'
-    f'<div class="app-title">Instagram Lead Finder & Classifier</div>'
-    f'<div class="app-subtitle">Extract followers or following, evaluate bio metadata, and classify prospects into targeted sales leads.</div>'
+    f'<div>'
+    f'<div class="app-title">🎯 Instagram Lead Finder & Classifier</div>'
+    f'<div class="app-subtitle">Extract followers or following, evaluate bio metadata, parse contact emails/phones & classify sales prospects.</div>'
+    f'</div>'
+    f'<div>{status_badge_html}</div>'
     f'</div>',
     unsafe_allow_html=True
 )
 
 # ---------------------------------------------------------
-# 2. STEP 1: AUTHENTICATION (SHOWN WHEN NOT LOGGED IN)
+# 2. STEP 1: AUTHENTICATION
 # ---------------------------------------------------------
 if not st.session_state.is_authenticated:
     st.markdown("""
-    <div style="background: #111111; border: 1px solid #222222; border-radius: 10px; padding: 18px 20px 14px 20px; margin-bottom: 1.2rem;">
-        <div style="color: #ffffff; font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 20px; margin-bottom: 1.25rem;">
+        <div style="color: #F8FAFC; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
             <span>🔐 Step 1: Connect Instagram Account</span>
         </div>
-        <div style="color: #94a3b8; font-size: 0.84rem; margin-top: 4px; margin-bottom: 12px;">
-            Pehle apna account ya sessionid verify karein. Authenticate hone ke baad hi Target Account, Keywords aur Search Parameters unlock honge.
+        <div style="color: #94A3B8; font-size: 0.82rem; margin-top: 4px; margin-bottom: 14px;">
+            Enter your Session ID or Instagram credentials to unlock lead crawling parameters and quality filters.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -231,23 +335,13 @@ if not st.session_state.is_authenticated:
     auth_col_mode, auth_col_inputs = st.columns([1.2, 3.8])
 
     with auth_col_mode:
-        auth_mode = st.radio(
-            "Authentication Method", 
-            ["Session ID", "OTP / Login"], 
-            index=0,
-            label_visibility="collapsed"
-        )
+        auth_mode = st.radio("Authentication Method", ["Session ID", "OTP / Login"], index=0, label_visibility="collapsed")
 
     with auth_col_inputs:
         if auth_mode == "Session ID":
             c_sid_in, c_sid_btn = st.columns([3, 1])
             with c_sid_in:
-                sessionid_input_val = st.text_input(
-                    "Session ID", 
-                    type="password", 
-                    placeholder="Paste your Instagram sessionid cookie value here...", 
-                    label_visibility="collapsed"
-                )
+                sessionid_input_val = st.text_input("Session ID", type="password", placeholder="Paste your Instagram sessionid cookie value here...", label_visibility="collapsed")
             with c_sid_btn:
                 if st.button("🔐 Connect Account", type="primary", use_container_width=True):
                     if sessionid_input_val and len(sessionid_input_val.strip()) > 5:
@@ -266,7 +360,6 @@ if not st.session_state.is_authenticated:
                     else:
                         st.error("Please enter a valid sessionid cookie.")
         else:
-            # Username & Password / OTP Mode
             if not st.session_state.awaiting_otp:
                 c_u1, c_u2, c_u3 = st.columns([1.5, 1.5, 1])
                 with c_u1:
@@ -276,7 +369,7 @@ if not st.session_state.is_authenticated:
                 with c_u3:
                     if st.button("🔐 Login Account", type="primary", use_container_width=True):
                         if u_val and p_val:
-                            with st.spinner("Authenticating with Instagram..."):
+                            with st.spinner("Authenticating..."):
                                 eng = InstagramAgentEngine(username=u_val, password=p_val)
                                 st.session_state.engine = eng
                                 st.session_state.saved_username = u_val
@@ -296,11 +389,10 @@ if not st.session_state.is_authenticated:
                         else:
                             st.error("Please enter both username and password.")
             else:
-                # 2FA OTP Interactive Verification Box
                 st.markdown("""
-                <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid #6366f1; border-radius: 8px; padding: 10px 14px; margin-bottom: 0.8rem;">
-                    <span style="color: #a5b4fc; font-weight: 600; font-size: 0.92rem;">🔐 Two-Factor Authentication (OTP) Required</span>
-                    <div style="color: #cbd5e1; font-size: 0.8rem; margin-top: 2px;">Instagram has sent a 6-digit security code to your device. Enter it below to complete authentication.</div>
+                <div style="background: rgba(91, 110, 245, 0.12); border: 1px solid #5B6EF5; border-radius: 8px; padding: 10px 14px; margin-bottom: 0.8rem;">
+                    <span style="color: #818CF8; font-weight: 600; font-size: 0.92rem;">🔐 Two-Factor Authentication (OTP) Required</span>
+                    <div style="color: #CBD5E1; font-size: 0.8rem; margin-top: 2px;">Enter the 6-digit verification code sent to your phone/app.</div>
                 </div>
                 """, unsafe_allow_html=True)
                 otp_c1, otp_c2, otp_c3 = st.columns([2, 1, 1])
@@ -316,7 +408,7 @@ if not st.session_state.is_authenticated:
                                 st.success("🎉 OTP Verified & Connected!")
                                 st.rerun()
                             else:
-                                st.error("❌ Invalid OTP code or verification expired.")
+                                st.error("❌ Invalid OTP code.")
                         else:
                             st.error("Please enter the 6-digit OTP code.")
                 with otp_c3:
@@ -327,116 +419,59 @@ if not st.session_state.is_authenticated:
     st.markdown("---")
 
 # ---------------------------------------------------------
-# 3. STEP 2: SEARCH SETUP & CONTROLS (UNLOCKED AFTER STEP 1)
+# 3. STEP 2: SEARCH PARAMETERS & CONTROL PANEL
 # ---------------------------------------------------------
 else:
-    # Connected Status Banner
+    # Top Account Connection Status Bar
     b_col1, b_col2 = st.columns([4, 1])
     with b_col1:
         st.markdown(f"""
-        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 7px 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 0.8rem;">
-            <span style="color: #10b981; font-weight: 700; font-size: 0.88rem;">🟢 Account Connected:</span>
-            <span style="color: #ffffff; font-weight: 600; font-size: 0.88rem;">@{st.session_state.auth_user}</span>
-            <span style="color: #94a3b8; font-size: 0.78rem;">— Ready for scraping & classification</span>
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 0.8rem;">
+            <span style="color: #10B981; font-weight: 700; font-size: 0.88rem;">🟢 Connected Account:</span>
+            <span style="color: #F8FAFC; font-weight: 600; font-size: 0.88rem;">@{st.session_state.auth_user}</span>
+            <span style="color: #94A3B8; font-size: 0.78rem;">— Active & Ready for Lead Scraping</span>
         </div>
         """, unsafe_allow_html=True)
     with b_col2:
-        if st.button("🔄 Disconnect / Change", use_container_width=True, disabled=inputs_disabled):
-            import glob
-            for sf in glob.glob("session-*"):
-                try:
-                    os.remove(sf)
-                except Exception:
-                    pass
+        if st.button("🔄 Disconnect", use_container_width=True, disabled=inputs_disabled):
             st.session_state.is_authenticated = False
             st.session_state.engine = None
             st.session_state.auth_user = ""
-            st.session_state.saved_sessionid = ""
-            st.session_state.saved_username = ""
-            st.session_state.saved_password = ""
             st.rerun()
 
-    # Search Configuration Grid
-    with st.container():
-        # Row 1: Titles
-        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns([1.3, 1.3, 1.2, 1.4])
-        r1_c1.markdown('<div class="config-header">1. Target Account</div>', unsafe_allow_html=True)
-        r1_c2.markdown('<div class="config-header">2. Limits & Stop Goal</div>', unsafe_allow_html=True)
-        r1_c3.markdown('<div class="config-header">3. Speed & Delays</div>', unsafe_allow_html=True)
-        r1_c4.markdown('<div class="config-header">4. Keywords</div>', unsafe_allow_html=True)
+    # PRIMARY ACTION ZONE HERO CARD
+    st.markdown("""
+    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px 20px; margin-bottom: 1rem;">
+        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 10px;">
+            🎯 Primary Action Zone
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        # Row 2: Inputs
-        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns([1.3, 1.3, 1.2, 1.4])
-
-        with r2_c1:
-            target_username = st.text_input("Target Account ID", placeholder="e.g. zuck or handle", label_visibility="collapsed", disabled=inputs_disabled)
-            search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
-
-        with r2_c2:
-            c_l1, c_l2 = st.columns([1.1, 1.3])
-            with c_l1:
-                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000, value=1000, step=50, label_visibility="collapsed", disabled=inputs_disabled)
-            with c_l2:
-                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, label_visibility="collapsed", disabled=inputs_disabled)
-            crawl_depth = st.number_input("Depth", min_value=1, max_value=2, value=1, step=1, label_visibility="collapsed", disabled=inputs_disabled)
-
-        with r2_c3:
-            speed_option = st.selectbox(
-                "Processing Speed / Delay",
-                ["Fast ⚡ (1.0 - 2.5s)", "Standard ⚖️ (2.0 - 4.0s)", "Safe 🛡️ (4.0 - 8.0s)"],
-                index=1,
-                label_visibility="collapsed",
-                disabled=inputs_disabled
-            )
-            if "Fast" in speed_option:
-                min_delay_val, max_delay_val = 1.0, 2.5
-            elif "Standard" in speed_option:
-                min_delay_val, max_delay_val = 2.0, 4.0
-            else:
-                min_delay_val, max_delay_val = 4.0, 8.0
-
-        with r2_c4:
-            c_kw_in, c_kw_btn = st.columns([3, 1])
-            with c_kw_in:
-                new_kw = st.text_input("Add Keyword", placeholder="Type or paste comma-separated...", label_visibility="collapsed", key="kw_input_field", disabled=inputs_disabled)
-                if new_kw and new_kw.strip():
-                    parts = [k.strip().lower() for k in new_kw.split(",") if k.strip()]
-                    for p in parts:
-                        if p not in st.session_state.kw_list:
-                            st.session_state.kw_list.append(p)
-                    st.rerun()
-            with c_kw_btn:
-                if st.button("Clear", key="clear_kws_btn", use_container_width=True, disabled=inputs_disabled):
-                    st.session_state.kw_list = []
-                    st.rerun()
-
-            # Render chips
-            if st.session_state.kw_list:
-                chips_markup = "".join([f'<span class="chip-tag">{k}</span>' for k in st.session_state.kw_list])
-                st.markdown(f'<div style="margin-top:0.3rem;">{chips_markup}</div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # Action Toolbar
-    col_act1, col_act2, col_act3, col_act4, col_act5 = st.columns([1, 1, 1, 1, 1])
-
-    with col_act1:
+    hero_c1, hero_c2, hero_c3 = st.columns([2.5, 1.5, 1.5])
+    
+    with hero_c1:
+        target_username = st.text_input("Target Account Username", placeholder="e.g. pawan_kmt18", disabled=inputs_disabled)
+    with hero_c2:
+        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, disabled=inputs_disabled)
+    with hero_c3:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        pending_queue_count = get_pending_queue_count()
         if not st.session_state.is_running:
             if st.button("▶️ Start Search", use_container_width=True, type="primary"):
-                # Collect all active keywords including any currently typed in box
                 final_kws = list(st.session_state.kw_list)
-                if new_kw and new_kw.strip():
-                    for k in new_kw.split(","):
+                typed_kw = st.session_state.get("kw_input_field", "").strip()
+                if typed_kw:
+                    for k in typed_kw.split(","):
                         clean_k = k.strip().lower()
                         if clean_k and clean_k not in final_kws:
                             final_kws.append(clean_k)
 
-                if not target_username:
-                    st.error("Please enter Target Account Username!")
+                if not target_username and pending_queue_count == 0:
+                    st.error("Please enter Target Username!")
                 elif not final_kws:
                     st.error("Please add at least 1 keyword!")
                 else:
-                    # Ensure engine is active
                     if not st.session_state.engine:
                         sid_saved = st.session_state.get("saved_sessionid", "")
                         u_saved = st.session_state.get("saved_username", "")
@@ -444,29 +479,44 @@ else:
                         st.session_state.engine = InstagramAgentEngine(username=u_saved, password=p_saved, sessionid=sid_saved)
                         st.session_state.engine.login()
 
+                    engine_ref = st.session_state.engine
                     st.session_state.kw_list = final_kws
                     st.session_state.is_paused = False
                     st.session_state.is_running = True
-                    st.session_state.engine.is_running = True
-                    st.session_state.engine.is_paused = False
+                    st.session_state.selected_search_id = None
+                    engine_ref.is_running = True
+                    engine_ref.is_paused = False
 
-                    def run_thread():
+                    def run_thread(eng, target_user, kws, neg_kws, max_accs, mode_s, depth, stop_m, logic, min_f, max_f, inc_priv):
                         try:
-                            st.session_state.engine.run_crawl(
-                                target_username=target_username,
-                                keywords=final_kws,
-                                max_accounts=max_limit,
-                                mode=search_mode,
-                                max_depth=crawl_depth,
-                                stop_mode="qualified" if "Qualified" in str(stop_mode_sel) else "total",
-                                min_delay=min_delay_val,
-                                max_delay=max_delay_val
+                            eng.run_crawl(
+                                target_username=target_user,
+                                keywords=kws,
+                                negative_keywords=neg_kws,
+                                max_accounts=max_accs,
+                                mode=mode_s,
+                                max_depth=depth,
+                                stop_mode=stop_m,
+                                match_logic=logic,
+                                min_followers=min_f,
+                                max_followers=max_f,
+                                include_private=inc_priv,
+                                resume_session=False
                             )
                         except Exception as thread_err:
-                            if st.session_state.engine:
-                                st.session_state.engine.log(f"❌ Crawl Error: {thread_err}")
-                                st.session_state.engine.is_running = False
-                    t = threading.Thread(target=run_thread, daemon=True)
+                            if eng:
+                                eng.log(f"❌ Crawl Error: {thread_err}")
+                                eng.is_running = False
+
+                    t = threading.Thread(
+                        target=run_thread,
+                        args=(
+                            engine_ref, target_username, final_kws, st.session_state.neg_kw_list,
+                            1000, search_mode, 1, "total", "OR",
+                            0, 0, True
+                        ),
+                        daemon=True
+                    )
                     st.session_state.crawl_thread = t
                     t.start()
                     st.rerun()
@@ -478,9 +528,109 @@ else:
                         st.session_state.engine.is_paused = False
                     st.rerun()
             else:
-                st.button("▶️ Searching...", use_container_width=True, disabled=True)
+                st.button("▶️ Scanning Active...", use_container_width=True, disabled=True)
 
-    with col_act2:
+    # ADVANCED CONFIGURATION AREA (COLLAPSIBLE TABS)
+    with st.expander("⚙️ Advanced Settings & Keyword Filters", expanded=True):
+        tab_cfg_kws, tab_cfg_limits, tab_cfg_filters, tab_cfg_neg = st.tabs([
+            "🎯 Target Keywords",
+            "📊 Limits & Depth",
+            "🛡️ Quality Filters",
+            "🚫 Blacklist / Exclude"
+        ])
+
+        with tab_cfg_kws:
+            def on_add_kw():
+                val = st.session_state.get("kw_input_field", "").strip()
+                if val:
+                    if "," in val:
+                        parts = [k.strip().lower() for k in val.split(",") if k.strip()]
+                    else:
+                        parts = [val.lower()]
+                    for p in parts:
+                        if p not in st.session_state.kw_list:
+                            st.session_state.kw_list.append(p)
+                        if p not in st.session_state.recent_keywords:
+                            st.session_state.recent_keywords.append(p)
+                    st.session_state["kw_input_field"] = ""
+
+            st.text_input("Add Target Keyword", placeholder="Type keyword and press Enter (e.g. mbbs, kolkata)...", key="kw_input_field", on_change=on_add_kw, disabled=inputs_disabled)
+            
+            if st.session_state.kw_list:
+                st.markdown("<div style='font-size:0.75rem; color:var(--accent); font-weight:600; margin-top:6px; margin-bottom:4px;'>Active Target Keywords:</div>", unsafe_allow_html=True)
+                chip_cols = st.columns(min(len(st.session_state.kw_list), 6))
+                for idx, kw in enumerate(list(st.session_state.kw_list)):
+                    c_idx = idx % min(len(st.session_state.kw_list), 6)
+                    if chip_cols[c_idx].button(f"🏷️ {kw} ✖", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Click to remove '{kw}'"):
+                        st.session_state.kw_list.remove(kw)
+                        st.rerun()
+                
+                if st.button("Clear All Keywords", key="clr_pos_kws", disabled=inputs_disabled):
+                    st.session_state.kw_list = []
+                    st.rerun()
+
+            recent_to_show = [rk for rk in st.session_state.recent_keywords if rk not in st.session_state.kw_list]
+            if recent_to_show:
+                st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); margin-top:8px;'>Quick Re-Add Recent:</div>", unsafe_allow_html=True)
+                rec_cols = st.columns(min(len(recent_to_show), 6))
+                for idx, rkw in enumerate(recent_to_show[:6]):
+                    c_idx = idx % min(len(recent_to_show), 6)
+                    if rec_cols[c_idx].button(f"+ {rkw}", key=f"add_rec_kw_{idx}_{rkw}", disabled=inputs_disabled):
+                        st.session_state.kw_list.append(rkw)
+                        st.rerun()
+
+        with tab_cfg_limits:
+            cfg_l1, cfg_l2, cfg_l3, cfg_l4 = st.columns(4)
+            with cfg_l1:
+                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000, value=1000, step=50, disabled=inputs_disabled)
+            with cfg_l2:
+                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, disabled=inputs_disabled)
+            with cfg_l3:
+                crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1, disabled=inputs_disabled)
+            with cfg_l4:
+                match_logic = st.selectbox("Matching Logic", ["OR", "AND"], index=0, disabled=inputs_disabled)
+
+        with tab_cfg_filters:
+            cfg_f1, cfg_f2, cfg_f3 = st.columns(3)
+            with cfg_f1:
+                min_followers = st.number_input("Min Followers", min_value=0, value=0, step=100, disabled=inputs_disabled)
+            with cfg_f2:
+                max_followers = st.number_input("Max Followers (0=Unlimited)", min_value=0, value=0, step=1000, disabled=inputs_disabled)
+            with cfg_f3:
+                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                include_private = st.checkbox("Include Private Profiles", value=True, disabled=inputs_disabled)
+
+        with tab_cfg_neg:
+            def on_add_neg_kw():
+                val = st.session_state.get("neg_kw_input_field", "").strip()
+                if val:
+                    if "," in val:
+                        parts = [k.strip().lower() for k in val.split(",") if k.strip()]
+                    else:
+                        parts = [val.lower()]
+                    for p in parts:
+                        if p not in st.session_state.neg_kw_list:
+                            st.session_state.neg_kw_list.append(p)
+                    st.session_state["neg_kw_input_field"] = ""
+
+            st.text_input("Exclude Keyword (Blacklist)", placeholder="Add blacklist words (e.g. crypto, agency)...", key="neg_kw_input_field", on_change=on_add_neg_kw, disabled=inputs_disabled)
+            
+            if st.session_state.neg_kw_list:
+                st.markdown("<div style='font-size:0.75rem; color:#F87171; font-weight:600; margin-top:4px;'>Active Blacklist Words:</div>", unsafe_allow_html=True)
+                neg_chip_cols = st.columns(min(len(st.session_state.neg_kw_list), 6))
+                for idx, kw in enumerate(list(st.session_state.neg_kw_list)):
+                    c_idx = idx % min(len(st.session_state.neg_kw_list), 6)
+                    if neg_chip_cols[c_idx].button(f"🚫 {kw} ✖", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Click to remove '{kw}'"):
+                        st.session_state.neg_kw_list.remove(kw)
+                        st.rerun()
+                
+                if st.button("Clear Blacklist", key="clr_neg_kws", disabled=inputs_disabled):
+                    st.session_state.neg_kw_list = []
+                    st.rerun()
+
+    # SECONDARY CONTROLS TOOLBAR
+    ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1, 1, 1, 1])
+    with ctrl_col1:
         if st.session_state.is_running:
             if not st.session_state.is_paused:
                 if st.button("⏸ Pause Search", use_container_width=True):
@@ -493,7 +643,7 @@ else:
         else:
             st.button("⏸ Pause Search", use_container_width=True, disabled=True)
 
-    with col_act3:
+    with ctrl_col2:
         if st.button("⏹ Stop Search", use_container_width=True, disabled=not st.session_state.is_running):
             if st.session_state.engine:
                 st.session_state.engine.is_running = False
@@ -502,47 +652,101 @@ else:
             st.session_state.is_paused = False
             st.rerun()
 
-    with col_act4:
+    with ctrl_col3:
         if st.button("🗑️ Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
             clear_database()
             st.session_state.selected_usernames.clear()
             st.rerun()
 
-    with col_act5:
+    with ctrl_col4:
         if st.button("🔄 Refresh Data", use_container_width=True):
             st.rerun()
 
     st.markdown("---")
 
 # ---------------------------------------------------------
-# 4. SUMMARY METRICS
+# 4. UNIFIED STAT BAR & METRICS DASHBOARD
 # ---------------------------------------------------------
-counts = get_counts()
-m1, m2, m3, m4, m5 = st.columns(5)
+history_list = get_search_history()
 
-m1.metric("Total Evaluated", counts["total"])
-m2.metric("Qualified", counts["qualified"])
-m3.metric("Needs Review", counts["doubtful"])
-m4.metric("Unqualified", counts["unqualified"])
-m5.metric("Private Profiles", counts["private"])
+active_search_id = None
+sel_sid = st.session_state.get("selected_search_id", None)
+if st.session_state.engine and getattr(st.session_state.engine, "current_search_id", 0) > 0:
+    active_search_id = st.session_state.engine.current_search_id
+elif sel_sid is not None:
+    active_search_id = sel_sid
+elif history_list:
+    active_search_id = history_list[0]["id"]
+
+if history_list:
+    h_col1, h_col2 = st.columns([3.5, 1.5])
+    with h_col1:
+        session_options = {}
+        for h in history_list:
+            hid = h["id"]
+            lbl = f"Search #{hid}: @{h.get('target_username')} ({h.get('keywords')}) - [{h.get('status')}]"
+            session_options[lbl] = hid
+        session_options["🌐 All Searches Combined"] = "ALL"
+
+        selected_label = st.selectbox(
+            "Select Search Session View",
+            list(session_options.keys()),
+            index=0,
+            key="search_session_selector"
+        )
+        chosen_val = session_options[selected_label]
+        if chosen_val == "ALL":
+            active_search_id = None
+        elif chosen_val is not None:
+            active_search_id = chosen_val
+
+counts = get_counts(search_id=active_search_id)
+
+st.markdown(f"""
+<div class="stat-bar">
+    <div class="stat-item">
+        <div class="stat-num">{counts['total']:,}</div>
+        <div class="stat-title">Total Evaluated</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-num" style="color: #34D399;">{counts['qualified']:,}</div>
+        <div class="stat-title">Qualified Leads</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-num" style="color: #FBBF24;">{counts['doubtful']:,}</div>
+        <div class="stat-title">Needs Review</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-num" style="color: #FCA5A5;">{counts['unqualified']:,}</div>
+        <div class="stat-title">Unqualified</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-num" style="color: #818CF8;">{counts['contacts']:,}</div>
+        <div class="stat-title">Extracted Contacts</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-num" style="color: #94A3B8;">{counts['private']:,}</div>
+        <div class="stat-title">Private Profiles</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 5. FILTERS TOOLBAR (ALIGNED ON SAME HORIZONTAL LINE)
+# 5. FILTERS & EXPORT TOOLBAR
 # ---------------------------------------------------------
-st.markdown("##### Filters")
-f_col1, f_col2, f_col3, f_col4 = st.columns([2, 1, 1, 0.8])
+st.markdown("##### Filter & Export Leads")
+f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([2, 1, 1, 0.9, 0.9, 0.9])
 
 with f_col1:
-    search_query = st.text_input("Search Filter", placeholder="Search by username, name, bio, or keyword...", label_visibility="collapsed")
+    search_query = st.text_input("Search Filter", placeholder="Search username, bio, email, phone, or keyword...", label_visibility="collapsed")
 with f_col2:
-    min_match_score = st.number_input("Minimum Match Score (%)", min_value=0, max_value=100, value=0, step=5, label_visibility="collapsed")
+    min_match_score = st.number_input("Min Match Score (%)", min_value=0, max_value=100, value=0, step=5, label_visibility="collapsed")
 with f_col3:
     category_filter_sel = st.selectbox("Category Filter", ["All Categories", "Qualified", "Needs Review", "Unqualified"], index=0, label_visibility="collapsed")
 with f_col4:
-    if st.button("🔄 Refresh", use_container_width=True, key="btn_filter_refresh"):
-        st.rerun()
+    has_contact_check = st.checkbox("With Email/Phone Only", value=False)
 
 cat_db_param = None
 if category_filter_sel == "Qualified":
@@ -552,18 +756,60 @@ elif category_filter_sel == "Needs Review":
 elif category_filter_sel == "Unqualified":
     cat_db_param = "UNQUALIFIED"
 
-# Query filtered results
 filtered_accounts = get_filtered_accounts(
     category_filter=cat_db_param,
     min_score=float(min_match_score),
-    search_query=search_query
+    search_query=search_query,
+    has_contact_only=has_contact_check,
+    search_id=active_search_id
 )
+
+# Export Data Generators
+df_export = pd.DataFrame(filtered_accounts)
+if not df_export.empty:
+    export_cols = [c for c in ["username", "full_name", "category", "match_score", "email", "phone", "matched_keywords", "follower_count", "following_count", "bio", "is_private", "reason"] if c in df_export.columns]
+    df_export = df_export[export_cols]
+
+with f_col5:
+    if not df_export.empty:
+        csv_bytes = df_export.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Export CSV", data=csv_bytes, file_name="instagram_leads.csv", mime="text/csv", use_container_width=True)
+    else:
+        st.button("📥 Export CSV", disabled=True, use_container_width=True)
+
+with f_col6:
+    if not df_export.empty:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_export.to_excel(writer, index=False, sheet_name='Instagram Leads')
+        excel_bytes = buffer.getvalue()
+        st.download_button("📊 Export Excel", data=excel_bytes, file_name="instagram_leads.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    else:
+        st.button("📊 Export Excel", disabled=True, use_container_width=True)
 
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 6. DIALOGS (ACCOUNT DETAILS & DELETION CONFIRMATION)
+# 6. MODAL DIALOGS (DETAILS, OUTREACH PITCH, DELETION)
 # ---------------------------------------------------------
+@st.dialog("Direct Message Pitch Generator")
+def show_outreach_pitch_dialog(acc):
+    st.markdown(f"### 💬 Outreach Pitch for @{acc['username']}")
+    name = acc['full_name'] or acc['username']
+    matched_kws = acc['matched_keywords'] or 'your profile'
+    
+    pitch_style = st.selectbox("Pitch Style", ["Professional Collaboration", "Casual Sales DM", "Value First Offer"])
+    
+    if pitch_style == "Professional Collaboration":
+        pitch_text = f"Hey {name}! 👋 I noticed your profile and your awesome work around {matched_kws}. I love what you're building! Would love to connect and discuss potential synergies or collaborations. Let me know if you're open to a quick chat!"
+    elif pitch_style == "Casual Sales DM":
+        pitch_text = f"Hi {name}! Came across your page while exploring top profiles in {matched_kws}. Impressive bio! We've helped creators & brands in your niche scale efficiently. Would you be open to seeing a 2-min breakdown of how?"
+    else:
+        pitch_text = f"Hey {name}, quick compliment on your page! Love your content on {matched_kws}. I put together some free growth insights specifically tailored for accounts like yours. Mind if I send it over here?"
+
+    st.text_area("Generated DM Pitch", value=pitch_text, height=140)
+    st.caption("Tip: Copy and paste this directly into your Instagram Direct Messages or Email outreach!")
+
 @st.dialog("Account Details")
 def show_account_details_dialog(acc):
     st.markdown(f"### @{acc['username']}")
@@ -579,21 +825,9 @@ def show_account_details_dialog(acc):
 
     score_val = acc.get('match_score', 0)
     st.write(f"**Match Score:** {score_val:.0f}%")
+    st.write(f"**Extracted Email:** `{acc.get('email') or 'None'}`")
+    st.write(f"**Extracted Phone:** `{acc.get('phone') or 'None'}`")
     st.write(f"**Matched Keywords:** {acc['matched_keywords'] or 'None'}")
-    
-    locations = []
-    bio_t = (acc['bio'] or '').lower()
-    uname_t = (acc['username'] or '').lower()
-    name_t = (acc['full_name'] or '').lower()
-    for kw in (acc['matched_keywords'] or '').split(','):
-        k_clean = kw.strip().lower()
-        if not k_clean: continue
-        if k_clean in uname_t: locations.append("Username")
-        if k_clean in name_t: locations.append("Name")
-        if k_clean in bio_t: locations.append("Bio")
-    
-    where_matched = ", ".join(set(locations)) if locations else "Bio / Profile Text"
-    st.write(f"**Where Matched:** {where_matched}")
     st.write(f"**Bio:** {acc['bio'] or 'No bio text'}")
     st.write(f"**Followers:** {acc['follower_count']:,} | **Following:** {acc['following_count']:,}")
     st.write(f"**Account Type:** {'Private Profile' if acc['is_private'] else 'Public Profile'}")
@@ -612,19 +846,6 @@ def show_account_details_dialog(acc):
             delete_account(acc['username'])
             st.rerun()
 
-@st.dialog("Confirm Deletion")
-def confirm_single_delete_dialog(username):
-    st.write(f"Are you sure you want to delete account **@{username}**?")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Yes, Delete", type="primary", use_container_width=True):
-            delete_account(username)
-            st.session_state.selected_usernames.discard(username)
-            st.rerun()
-    with c2:
-        if st.button("Cancel", use_container_width=True):
-            st.rerun()
-
 @st.dialog("Confirm Batch Deletion")
 def confirm_batch_delete_dialog(usernames):
     st.write(f"Are you sure you want to delete **{len(usernames)}** selected accounts?")
@@ -640,7 +861,7 @@ def confirm_batch_delete_dialog(usernames):
             st.rerun()
 
 # ---------------------------------------------------------
-# 7. RESULTS LIST UI (UNIQUE KEY SPECIFIED PER TAB TO PREVENT StreamlitDuplicateElementId)
+# 7. RESULTS LIST UI
 # ---------------------------------------------------------
 tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "All Results",
@@ -652,10 +873,17 @@ tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
 
 def render_account_list(accounts_list, tab_key="all"):
     if not accounts_list:
-        st.info("No accounts matching the filter criteria.")
+        st.markdown("""
+        <div style="background: rgba(30, 41, 59, 0.4); border: 1px dashed #334155; border-radius: 12px; padding: 24px; text-align: center; margin: 1.5rem 0;">
+            <div style="font-size: 1.8rem; margin-bottom: 8px;">🎯</div>
+            <div style="font-size: 1.05rem; font-weight: 700; color: #F8FAFC;">No Accounts Evaluated for this Search Session</div>
+            <div style="font-size: 0.85rem; color: #94A3B8; margin-top: 4px;">
+                Enter a <b>Target Username</b> & <b>Keywords</b> above, then click <b>▶️ Start Search</b> to begin scanning!
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
-    # Action bar for Batch Delete
     b_col1, b_col2 = st.columns([3, 1])
     with b_col2:
         num_sel = len(st.session_state.selected_usernames)
@@ -665,17 +893,23 @@ def render_account_list(accounts_list, tab_key="all"):
     for acc in accounts_list:
         cat = acc["category"]
         if cat == "QUALIFIED":
-            badge_html = '<span class="badge badge-qualified">Qualified</span>'
+            badge_html = '<span class="badge badge-qualified">🟢 Qualified</span>'
         elif cat == "DOUBTFUL":
-            badge_html = '<span class="badge badge-review">Needs Review</span>'
+            badge_html = '<span class="badge badge-review">🟡 Needs Review</span>'
         else:
-            badge_html = '<span class="badge badge-unqualified">Unqualified</span>'
+            badge_html = '<span class="badge badge-unqualified">🔴 Unqualified</span>'
 
         score_val = acc.get("match_score", 0.0)
-        bio_preview = (acc['bio'][:120] + "...") if acc['bio'] and len(acc['bio']) > 120 else (acc['bio'] or "No bio preview")
+        bio_preview = (acc['bio'][:110] + "...") if acc['bio'] and len(acc['bio']) > 110 else (acc['bio'] or "No bio preview")
         
+        contact_badges = ""
+        if acc.get("email"):
+            contact_badges += f'<span class="badge badge-contact">✉️ {acc["email"]}</span> '
+        if acc.get("phone"):
+            contact_badges += f'<span class="badge badge-contact">📞 {acc["phone"]}</span> '
+
         with st.container():
-            c_check, c_info, c_actions = st.columns([0.3, 4, 1.4])
+            c_check, c_info, c_actions = st.columns([0.3, 3.8, 1.8])
             
             with c_check:
                 is_selected = acc['username'] in st.session_state.selected_usernames
@@ -688,21 +922,26 @@ def render_account_list(accounts_list, tab_key="all"):
             with c_info:
                 st.markdown(
                     f"**@{acc['username']}** &nbsp; "
-                    f"<span style='color:#94a3b8;'>({acc['full_name'] or 'No Name'})</span> &nbsp; "
-                    f"{badge_html} &nbsp; "
-                    f"<span style='font-size:0.8rem; color:#6366f1; font-weight:600;'>Match: {score_val:.0f}%</span>", 
+                    f"<span style='color:#94A3B8;'>({acc['full_name'] or 'No Name'})</span> &nbsp; "
+                    f"{badge_html} &nbsp; {contact_badges}"
+                    f"<span style='font-size:0.8rem; color:#818CF8; font-weight:600;'>Match: {score_val:.0f}%</span>", 
                     unsafe_allow_html=True
                 )
                 st.caption(f"Bio: {bio_preview} | Followers: {acc['follower_count']:,} | Matched: {acc['matched_keywords'] or 'None'}")
 
             with c_actions:
-                ac1, ac2 = st.columns(2)
+                ac1, ac2, ac3 = st.columns([1, 1, 1.2])
                 with ac1:
                     if st.button("Details", key=f"det_{tab_key}_{acc['username']}", use_container_width=True):
                         show_account_details_dialog(acc)
                 with ac2:
                     if st.button("Delete", key=f"del_{tab_key}_{acc['username']}", use_container_width=True):
-                        confirm_single_delete_dialog(acc['username'])
+                        delete_account(acc['username'])
+                        st.session_state.selected_usernames.discard(acc['username'])
+                        st.rerun()
+                with ac3:
+                    if st.button("💬 DM Pitch", key=f"pitch_{tab_key}_{acc['username']}", use_container_width=True):
+                        show_outreach_pitch_dialog(acc)
 
 with tab_all:
     render_account_list(filtered_accounts, tab_key="all")
@@ -722,21 +961,11 @@ with tab_unqual:
 with tab_logs:
     st.markdown("##### Live Activity Logs")
     if st.session_state.engine and st.session_state.engine.logs:
-        st.code("\n".join(st.session_state.engine.logs[-150:]), language="text")
+        st.code("\n".join(st.session_state.engine.logs[-200:]), language="text")
     else:
         st.info("Agent is idle. Start search to view activity logs.")
 
-# Sync session state with active engine status across background threads
+# Sync state
 if st.session_state.engine:
-    was_running = st.session_state.is_running
     st.session_state.is_running = st.session_state.engine.is_running
     st.session_state.is_paused = st.session_state.engine.is_paused
-    if was_running and not st.session_state.is_running:
-        st.rerun()
-
-# Non-blocking auto refresh dashboard while search is actively running
-if st.session_state.is_running and not st.session_state.is_paused:
-    time.sleep(2)
-    st.rerun()
-
-
