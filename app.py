@@ -14,13 +14,9 @@ from insta_bot.database import (
 from insta_bot.scraper import InstagramAgentEngine
 from insta_bot.config import MIN_DELAY_PER_PROFILE, MAX_DELAY_PER_PROFILE
 
-# Top-level Vercel Python entrypoint export compatibility
-app = application = handler = None
-
 # Page Configuration
 st.set_page_config(
     page_title="Instagram Lead Finder & Classifier",
-    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -28,24 +24,24 @@ st.set_page_config(
 # Initialize Database (WAL mode & auto-migrations)
 init_db()
 
-# Custom Styling (Refined Graphite Dark Theme inspired by Linear/Vercel)
+# Custom Styling (Pure Dark Theme with Dark Red Accent & Clean Enterprise Aesthetics)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
     :root {
-        --bg-base: #0E1015;
-        --bg-surface: #151821;
-        --bg-surface-elevated: #1B1E29;
-        --bg-input: #12141C;
-        --border-subtle: rgba(255, 255, 255, 0.08);
-        --border-hover: rgba(91, 110, 245, 0.4);
-        --text-primary: #F1F5F9;
+        --bg-base: #050608;
+        --bg-surface: #0D0E12;
+        --bg-surface-elevated: #13161D;
+        --bg-input: #080A0E;
+        --border-subtle: rgba(255, 255, 255, 0.07);
+        --border-hover: rgba(185, 28, 28, 0.5);
+        --text-primary: #E2E8F0;
         --text-secondary: #94A3B8;
         --text-muted: #64748B;
-        --accent: #5B6EF5;
-        --accent-hover: #4C5EE8;
-        --accent-glow: rgba(91, 110, 245, 0.2);
+        --accent: #8B0000;
+        --accent-hover: #A50000;
+        --accent-glow: rgba(139, 0, 0, 0.35);
     }
     
     body, .stApp {
@@ -67,48 +63,42 @@ st.markdown("""
 
     /* Header Component Styling */
     .app-header {
-        margin-bottom: 1.5rem;
-        padding-bottom: 1rem;
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.85rem;
         border-bottom: 1px solid var(--border-subtle);
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
     .app-title {
-        font-size: 1.6rem;
+        font-size: 1.5rem;
         font-weight: 700;
         color: #F8FAFC;
         letter-spacing: -0.025em;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        text-transform: uppercase;
     }
     .app-subtitle {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         color: var(--text-secondary);
-        margin-top: 0.25rem;
+        margin-top: 0.2rem;
     }
 
     /* Section Card Containers */
     .hero-card {
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 20px;
+        border-radius: 10px;
+        padding: 18px;
         margin-bottom: 1.25rem;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }
 
     .section-label {
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--accent);
+        letter-spacing: 0.08em;
+        color: var(--text-secondary);
         margin-bottom: 0.75rem;
-        display: flex;
-        align-items: center;
-        gap: 6px;
     }
 
     /* Custom Input Controls Styling */
@@ -116,12 +106,12 @@ st.markdown("""
         background-color: var(--bg-input) !important;
         color: var(--text-primary) !important;
         border: 1px solid var(--border-subtle) !important;
-        border-radius: 8px !important;
-        font-size: 0.9rem !important;
+        border-radius: 6px !important;
+        font-size: 0.88rem !important;
         transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
     }
     .stTextInput input:focus, .stNumberInput input:focus, .stSelectbox select:focus {
-        border-color: var(--accent) !important;
+        border-color: var(--accent-hover) !important;
         box-shadow: 0 0 0 2px var(--accent-glow) !important;
     }
 
@@ -129,12 +119,12 @@ st.markdown("""
     .badge {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.01em;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
     }
     .badge-qualified {
         background-color: rgba(16, 185, 129, 0.12);
@@ -152,42 +142,41 @@ st.markdown("""
         border: 1px solid rgba(239, 68, 68, 0.3);
     }
     .badge-contact {
-        background-color: rgba(91, 110, 245, 0.12);
-        color: #818CF8;
-        border: 1px solid rgba(91, 110, 245, 0.3);
-        font-size: 0.75rem;
-        padding: 2px 8px;
+        background-color: rgba(139, 0, 0, 0.18);
+        color: #FCA5A5;
+        border: 1px solid rgba(185, 28, 28, 0.4);
+        font-size: 0.72rem;
+        padding: 2px 7px;
     }
 
-    /* Agent Status Badges */
-    .running-cyclist {
-        background: rgba(91, 110, 245, 0.15);
-        color: #818CF8;
-        border: 1px solid rgba(91, 110, 245, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+    /* Agent Status Tag */
+    .running-tag {
+        background: rgba(185, 28, 28, 0.18);
+        color: #FCA5A5;
+        border: 1px solid rgba(185, 28, 28, 0.4);
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
     }
-    .paused-badge {
+    .paused-tag {
         background: rgba(245, 158, 11, 0.15);
         color: #FCD34D;
         border: 1px solid rgba(245, 158, 11, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.82rem;
-        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
     }
 
     /* Unified Stat Bar */
     .stat-bar {
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 16px 20px;
+        border-radius: 8px;
+        padding: 14px 18px;
         display: grid;
         grid-template-columns: repeat(6, 1fr);
         gap: 12px;
@@ -202,54 +191,53 @@ st.markdown("""
     }
     .stat-num {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 1.5rem;
+        font-size: 1.4rem;
         font-weight: 700;
         color: #F8FAFC;
         line-height: 1.2;
     }
     .stat-title {
-        font-size: 0.72rem;
-        font-weight: 600;
+        font-size: 0.7rem;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.06em;
         color: var(--text-secondary);
         margin-top: 4px;
     }
 
-    /* Lead Card Container with Hover State */
+    /* Lead Card Container */
     .lead-card {
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        padding: 16px 18px;
-        margin-bottom: 10px;
-        transition: transform 0.15s ease, border-color 0.15s ease;
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin-bottom: 8px;
+        transition: border-color 0.15s ease;
     }
     .lead-card:hover {
         border-color: var(--border-hover);
-        transform: translateY(-1px);
     }
 
-    /* Custom Button Overrides for Primary vs Ghost Actions */
+    /* Primary vs Ghost Buttons */
     div.stButton > button[kind="primary"] {
         background-color: var(--accent) !important;
         color: #FFFFFF !important;
-        border: none !important;
+        border: 1px solid var(--accent-hover) !important;
         font-weight: 600 !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         box-shadow: 0 4px 12px var(--accent-glow) !important;
         transition: all 0.15s ease !important;
     }
     div.stButton > button[kind="primary"]:hover {
         background-color: var(--accent-hover) !important;
-        box-shadow: 0 6px 16px rgba(91, 110, 245, 0.35) !important;
+        box-shadow: 0 6px 16px rgba(185, 28, 28, 0.45) !important;
     }
 
     div.stButton > button[kind="secondary"] {
         background-color: var(--bg-surface-elevated) !important;
         color: var(--text-primary) !important;
         border: 1px solid var(--border-subtle) !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         font-weight: 500 !important;
         transition: all 0.15s ease !important;
     }
@@ -258,29 +246,28 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* Desktop Spacer Helper */
     .desktop-spacer {
         margin-top: 28px;
     }
 
-    /* Responsive Media Queries for Mobile Screens */
+    /* Mobile Responsiveness */
     @media (max-width: 768px) {
         .block-container {
-            padding-top: 1rem !important;
-            padding-bottom: 2rem !important;
+            padding-top: 0.75rem !important;
+            padding-bottom: 1.5rem !important;
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
         }
         .app-header {
             flex-direction: column !important;
             align-items: flex-start !important;
-            gap: 10px !important;
+            gap: 8px !important;
         }
         .app-title {
-            font-size: 1.25rem !important;
+            font-size: 1.2rem !important;
         }
         .app-subtitle {
-            font-size: 0.78rem !important;
+            font-size: 0.75rem !important;
         }
         .stat-bar {
             grid-template-columns: repeat(2, 1fr) !important;
@@ -297,20 +284,13 @@ st.markdown("""
             border-bottom: none !important;
         }
         .stat-num {
-            font-size: 1.25rem !important;
+            font-size: 1.2rem !important;
         }
         .desktop-spacer {
             margin-top: 0px !important;
         }
-        div[data-testid="stHorizontalBlock"] {
-            gap: 0.5rem !important;
-        }
         .stButton button {
             width: 100% !important;
-        }
-        .badge {
-            font-size: 0.7rem !important;
-            padding: 2px 8px !important;
         }
     }
 </style>
@@ -358,15 +338,15 @@ inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 # ---------------------------------------------------------
 status_badge_html = ""
 if st.session_state.is_running and not st.session_state.is_paused:
-    status_badge_html = '<span class="running-cyclist">⚡ Agent Active & Scanning...</span>'
+    status_badge_html = '<span class="running-tag">[AGENT ACTIVE & SCANNING]</span>'
 elif st.session_state.is_running and st.session_state.is_paused:
-    status_badge_html = '<span class="paused-badge">⏸ Agent Paused</span>'
+    status_badge_html = '<span class="paused-tag">[AGENT PAUSED]</span>'
 
 st.markdown(
     f'<div class="app-header">'
     f'<div>'
-    f'<div class="app-title">🎯 Instagram Lead Finder & Classifier</div>'
-    f'<div class="app-subtitle">Extract followers or following, evaluate bio metadata, parse contact emails/phones & classify sales prospects.</div>'
+    f'<div class="app-title">Instagram Lead Finder & Classifier</div>'
+    f'<div class="app-subtitle">Extract followers or following, evaluate bio metadata, parse contact details & classify sales leads.</div>'
     f'</div>'
     f'<div>{status_badge_html}</div>'
     f'</div>',
@@ -378,12 +358,12 @@ st.markdown(
 # ---------------------------------------------------------
 if not st.session_state.is_authenticated:
     st.markdown("""
-    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 20px; margin-bottom: 1.25rem;">
-        <div style="color: #F8FAFC; font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-            <span>🔐 Step 1: Connect Instagram Account</span>
+    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 18px; margin-bottom: 1.2rem;">
+        <div style="color: #F8FAFC; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+            Step 1: Authenticate Instagram Account
         </div>
-        <div style="color: #94A3B8; font-size: 0.82rem; margin-top: 4px; margin-bottom: 14px;">
-            Enter your Session ID or Instagram credentials to unlock lead crawling parameters and quality filters.
+        <div style="color: #94A3B8; font-size: 0.82rem; margin-top: 4px;">
+            Provide valid Session ID or Instagram credentials. Session ID verification fetches the actual profile name before unlocking workspace parameters.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -397,36 +377,33 @@ if not st.session_state.is_authenticated:
         if auth_mode == "Session ID":
             c_sid_in, c_sid_btn = st.columns([3, 1])
             with c_sid_in:
-                sessionid_input_val = st.text_input("Session ID", type="password", placeholder="Paste your Instagram sessionid cookie value here...", label_visibility="collapsed")
+                sessionid_input_val = st.text_input("Session ID", type="password", placeholder="Paste Instagram sessionid cookie value here...", label_visibility="collapsed")
             with c_sid_btn:
-                if st.button("🔐 Connect Account", type="primary", use_container_width=True):
+                if st.button("Connect Account", type="primary", use_container_width=True):
                     if sessionid_input_val and len(sessionid_input_val.strip()) > 5:
-                        with st.spinner("Verifying session cookie with Instagram..."):
+                        with st.spinner("Validating Session ID with Instagram..."):
                             eng = InstagramAgentEngine(sessionid=sessionid_input_val)
                             if eng.login():
                                 st.session_state.engine = eng
                                 st.session_state.saved_sessionid = sessionid_input_val.strip()
                                 st.session_state.is_authenticated = True
-                                st.session_state.auth_user = eng.username or "Session Cookie"
-                                st.success("🎉 Connected successfully!")
+                                st.session_state.auth_user = eng.username or "Authenticated User"
+                                st.success(f"Connected successfully as @{st.session_state.auth_user}!")
                                 st.rerun()
                             else:
-                                last_err = eng.logs[-1] if eng.logs else "Invalid session cookie"
+                                last_err = eng.logs[-1] if eng.logs else "Invalid or expired Session ID cookie"
                                 st.error(f"Authentication Failed: {last_err}")
                     else:
-                        st.error("Please enter a valid sessionid cookie.")
+                        st.error("Please enter a valid sessionid cookie value.")
             
-            with st.expander("❓ How to get Session ID on Mobile / PC"):
+            with st.expander("Session ID Instructions"):
                 st.markdown("""
-                **💡 Easiest Option for Mobile Users:**  
-                Select **"OTP / Login"** above to log in directly with your Instagram Username & Password (and 6-digit OTP code if 2FA is enabled). No cookie copy-pasting required!
-
-                ---
-
-                **📱 Mobile Browser Method (Chrome / Kiwi / Safari):**
-                1. Open Chrome/Safari on your phone and log into `https://www.instagram.com`.
-                2. Click the **Lock Icon 🔒** next to the website address bar -> **Cookies & Site Data** -> **Cookies** -> Select `sessionid` -> Copy value!
-                3. Or copy your `sessionid` cookie from PC Chrome (`F12` -> `Application` -> `Cookies`) and send it to your phone via WhatsApp/Notes!
+                **Mobile Browser Method (Chrome / Safari / Kiwi):**
+                1. Open `https://www.instagram.com` on your phone browser and log in.
+                2. Click the **Lock Icon** next to URL bar -> **Cookies & Site Data** -> **Cookies** -> Select `sessionid` -> Copy string value.
+                
+                **PC Method:**
+                Press `F12` in Chrome -> **Application** -> **Cookies** -> `sessionid` -> Copy value.
                 """)
         else:
             if not st.session_state.awaiting_otp:
@@ -436,7 +413,7 @@ if not st.session_state.is_authenticated:
                 with c_u2:
                     p_val = st.text_input("Password", type="password", placeholder="Instagram password...", label_visibility="collapsed")
                 with c_u3:
-                    if st.button("🔐 Login Account", type="primary", use_container_width=True):
+                    if st.button("Login Account", type="primary", use_container_width=True):
                         if u_val and p_val:
                             with st.spinner("Authenticating..."):
                                 eng = InstagramAgentEngine(username=u_val, password=p_val)
@@ -450,7 +427,7 @@ if not st.session_state.is_authenticated:
                                 elif login_res:
                                     st.session_state.is_authenticated = True
                                     st.session_state.auth_user = eng.username or u_val
-                                    st.success(f"🎉 Connected as @{st.session_state.auth_user}!")
+                                    st.success(f"Connected as @{st.session_state.auth_user}!")
                                     st.rerun()
                                 else:
                                     last_err = eng.logs[-1] if eng.logs else "Login failed"
@@ -459,29 +436,29 @@ if not st.session_state.is_authenticated:
                             st.error("Please enter both username and password.")
             else:
                 st.markdown("""
-                <div style="background: rgba(91, 110, 245, 0.12); border: 1px solid #5B6EF5; border-radius: 8px; padding: 10px 14px; margin-bottom: 0.8rem;">
-                    <span style="color: #818CF8; font-weight: 600; font-size: 0.92rem;">🔐 Two-Factor Authentication (OTP) Required</span>
-                    <div style="color: #CBD5E1; font-size: 0.8rem; margin-top: 2px;">Enter the 6-digit verification code sent to your phone/app.</div>
+                <div style="background: rgba(139, 0, 0, 0.15); border: 1px solid #8B0000; border-radius: 6px; padding: 10px 14px; margin-bottom: 0.8rem;">
+                    <span style="color: #FCA5A5; font-weight: 600; font-size: 0.88rem;">Two-Factor Authentication (OTP) Required</span>
+                    <div style="color: #CBD5E1; font-size: 0.8rem; margin-top: 2px;">Enter the 6-digit verification code sent to your mobile device or authenticator app.</div>
                 </div>
                 """, unsafe_allow_html=True)
                 otp_c1, otp_c2, otp_c3 = st.columns([2, 1, 1])
                 with otp_c1:
                     otp_val_in = st.text_input("6-Digit OTP", placeholder="Enter 6-digit code...", label_visibility="collapsed", key="otp_in_step1")
                 with otp_c2:
-                    if st.button("✅ Confirm OTP", type="primary", use_container_width=True):
+                    if st.button("Confirm OTP", type="primary", use_container_width=True):
                         if otp_val_in and st.session_state.engine:
                             if st.session_state.engine.confirm_two_factor(otp_val_in):
                                 st.session_state.awaiting_otp = False
                                 st.session_state.is_authenticated = True
                                 st.session_state.auth_user = st.session_state.engine.username
-                                st.success("🎉 OTP Verified & Connected!")
+                                st.success("OTP Verified & Connected!")
                                 st.rerun()
                             else:
-                                st.error("❌ Invalid OTP code.")
+                                st.error("Invalid OTP code.")
                         else:
                             st.error("Please enter the 6-digit OTP code.")
                 with otp_c3:
-                    if st.button("❌ Cancel", use_container_width=True):
+                    if st.button("Cancel", use_container_width=True):
                         st.session_state.awaiting_otp = False
                         st.rerun()
 
@@ -495,14 +472,14 @@ else:
     b_col1, b_col2 = st.columns([4, 1])
     with b_col1:
         st.markdown(f"""
-        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 0.8rem;">
-            <span style="color: #10B981; font-weight: 700; font-size: 0.88rem;">🟢 Connected Account:</span>
-            <span style="color: #F8FAFC; font-weight: 600; font-size: 0.88rem;">@{st.session_state.auth_user}</span>
-            <span style="color: #94A3B8; font-size: 0.78rem;">— Active & Ready for Lead Scraping</span>
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 0.8rem;">
+            <span style="color: #10B981; font-weight: 700; font-size: 0.85rem;">CONNECTED ACCOUNT:</span>
+            <span style="color: #F8FAFC; font-weight: 600; font-size: 0.85rem;">@{st.session_state.auth_user}</span>
+            <span style="color: #94A3B8; font-size: 0.78rem;">— Verified & Ready</span>
         </div>
         """, unsafe_allow_html=True)
     with b_col2:
-        if st.button("🔄 Disconnect", use_container_width=True, disabled=inputs_disabled):
+        if st.button("Disconnect", use_container_width=True, disabled=inputs_disabled):
             st.session_state.is_authenticated = False
             st.session_state.engine = None
             st.session_state.auth_user = ""
@@ -510,9 +487,9 @@ else:
 
     # PRIMARY ACTION ZONE HERO CARD
     st.markdown("""
-    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px 20px; margin-bottom: 1rem;">
-        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 10px;">
-            🎯 Primary Action Zone
+    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px 18px; margin-bottom: 1rem;">
+        <div style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin-bottom: 10px;">
+            Primary Action Zone
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -527,7 +504,7 @@ else:
         st.markdown("<div class='desktop-spacer'></div>", unsafe_allow_html=True)
         pending_queue_count = get_pending_queue_count()
         if not st.session_state.is_running:
-            if st.button("▶️ Start Search", use_container_width=True, type="primary"):
+            if st.button("Start Search", use_container_width=True, type="primary"):
                 final_kws = list(st.session_state.kw_list)
                 typed_kw = st.session_state.get("kw_input_field", "").strip()
                 if typed_kw:
@@ -574,7 +551,7 @@ else:
                             )
                         except Exception as thread_err:
                             if eng:
-                                eng.log(f"❌ Crawl Error: {thread_err}")
+                                eng.log(f"Crawl Error: {thread_err}")
                                 eng.is_running = False
 
                     t = threading.Thread(
@@ -591,21 +568,21 @@ else:
                     st.rerun()
         else:
             if st.session_state.is_paused:
-                if st.button("▶️ Resume Search", use_container_width=True, type="primary"):
+                if st.button("Resume Search", use_container_width=True, type="primary"):
                     st.session_state.is_paused = False
                     if st.session_state.engine:
                         st.session_state.engine.is_paused = False
                     st.rerun()
             else:
-                st.button("▶️ Scanning Active...", use_container_width=True, disabled=True)
+                st.button("Scanning Active...", use_container_width=True, disabled=True)
 
     # ADVANCED CONFIGURATION AREA (COLLAPSIBLE TABS)
-    with st.expander("⚙️ Advanced Settings & Keyword Filters", expanded=True):
+    with st.expander("Advanced Settings & Keyword Filters", expanded=True):
         tab_cfg_kws, tab_cfg_limits, tab_cfg_filters, tab_cfg_neg = st.tabs([
-            "🎯 Target Keywords",
-            "📊 Limits & Depth",
-            "🛡️ Quality Filters",
-            "🚫 Blacklist / Exclude"
+            "Target Keywords",
+            "Limits & Depth",
+            "Quality Filters",
+            "Blacklist Keywords"
         ])
 
         with tab_cfg_kws:
@@ -626,11 +603,11 @@ else:
             st.text_input("Add Target Keyword", placeholder="Type keyword and press Enter (e.g. mbbs, kolkata)...", key="kw_input_field", on_change=on_add_kw, disabled=inputs_disabled)
             
             if st.session_state.kw_list:
-                st.markdown("<div style='font-size:0.75rem; color:var(--accent); font-weight:600; margin-top:6px; margin-bottom:4px;'>Active Target Keywords:</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); font-weight:700; margin-top:6px; margin-bottom:4px; text-transform:uppercase;'>Active Target Keywords:</div>", unsafe_allow_html=True)
                 chip_cols = st.columns(min(len(st.session_state.kw_list), 6))
                 for idx, kw in enumerate(list(st.session_state.kw_list)):
                     c_idx = idx % min(len(st.session_state.kw_list), 6)
-                    if chip_cols[c_idx].button(f"🏷️ {kw} ✖", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Click to remove '{kw}'"):
+                    if chip_cols[c_idx].button(f"{kw}  ✕", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
                         st.session_state.kw_list.remove(kw)
                         st.rerun()
                 
@@ -685,11 +662,11 @@ else:
             st.text_input("Exclude Keyword (Blacklist)", placeholder="Add blacklist words (e.g. crypto, agency)...", key="neg_kw_input_field", on_change=on_add_neg_kw, disabled=inputs_disabled)
             
             if st.session_state.neg_kw_list:
-                st.markdown("<div style='font-size:0.75rem; color:#F87171; font-weight:600; margin-top:4px;'>Active Blacklist Words:</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:0.72rem; color:#F87171; font-weight:700; margin-top:4px; text-transform:uppercase;'>Active Blacklist Words:</div>", unsafe_allow_html=True)
                 neg_chip_cols = st.columns(min(len(st.session_state.neg_kw_list), 6))
                 for idx, kw in enumerate(list(st.session_state.neg_kw_list)):
                     c_idx = idx % min(len(st.session_state.neg_kw_list), 6)
-                    if neg_chip_cols[c_idx].button(f"🚫 {kw} ✖", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Click to remove '{kw}'"):
+                    if neg_chip_cols[c_idx].button(f"{kw}  ✕", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
                         st.session_state.neg_kw_list.remove(kw)
                         st.rerun()
                 
@@ -702,18 +679,18 @@ else:
     with ctrl_col1:
         if st.session_state.is_running:
             if not st.session_state.is_paused:
-                if st.button("⏸ Pause Search", use_container_width=True):
+                if st.button("Pause Search", use_container_width=True):
                     st.session_state.is_paused = True
                     if st.session_state.engine:
                         st.session_state.engine.is_paused = True
                     st.rerun()
             else:
-                st.button("⏸ Paused", use_container_width=True, disabled=True)
+                st.button("Paused", use_container_width=True, disabled=True)
         else:
-            st.button("⏸ Pause Search", use_container_width=True, disabled=True)
+            st.button("Pause Search", use_container_width=True, disabled=True)
 
     with ctrl_col2:
-        if st.button("⏹ Stop Search", use_container_width=True, disabled=not st.session_state.is_running):
+        if st.button("Stop Search", use_container_width=True, disabled=not st.session_state.is_running):
             if st.session_state.engine:
                 st.session_state.engine.is_running = False
                 st.session_state.engine.is_paused = False
@@ -722,13 +699,13 @@ else:
             st.rerun()
 
     with ctrl_col3:
-        if st.button("🗑️ Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
+        if st.button("Clear All Data", use_container_width=True, disabled=st.session_state.is_running):
             clear_database()
             st.session_state.selected_usernames.clear()
             st.rerun()
 
     with ctrl_col4:
-        if st.button("🔄 Refresh Data", use_container_width=True):
+        if st.button("Refresh Data", use_container_width=True):
             st.rerun()
 
     st.markdown("---")
@@ -755,7 +732,7 @@ if history_list:
             hid = h["id"]
             lbl = f"Search #{hid}: @{h.get('target_username')} ({h.get('keywords')}) - [{h.get('status')}]"
             session_options[lbl] = hid
-        session_options["🌐 All Searches Combined"] = "ALL"
+        session_options["All Searches Combined"] = "ALL"
 
         selected_label = st.selectbox(
             "Select Search Session View",
@@ -790,7 +767,7 @@ st.markdown(f"""
         <div class="stat-title">Unqualified</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num" style="color: #818CF8;">{counts['contacts']:,}</div>
+        <div class="stat-num" style="color: #FCA5A5;">{counts['contacts']:,}</div>
         <div class="stat-title">Extracted Contacts</div>
     </div>
     <div class="stat-item">
@@ -842,9 +819,9 @@ if not df_export.empty:
 with f_col5:
     if not df_export.empty:
         csv_bytes = df_export.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Export CSV", data=csv_bytes, file_name="instagram_leads.csv", mime="text/csv", use_container_width=True)
+        st.download_button("Export CSV", data=csv_bytes, file_name="instagram_leads.csv", mime="text/csv", use_container_width=True)
     else:
-        st.button("📥 Export CSV", disabled=True, use_container_width=True)
+        st.button("Export CSV", disabled=True, use_container_width=True)
 
 with f_col6:
     if not df_export.empty:
@@ -852,9 +829,9 @@ with f_col6:
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_export.to_excel(writer, index=False, sheet_name='Instagram Leads')
         excel_bytes = buffer.getvalue()
-        st.download_button("📊 Export Excel", data=excel_bytes, file_name="instagram_leads.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        st.download_button("Export Excel", data=excel_bytes, file_name="instagram_leads.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     else:
-        st.button("📊 Export Excel", disabled=True, use_container_width=True)
+        st.button("Export Excel", disabled=True, use_container_width=True)
 
 st.markdown("---")
 
@@ -863,14 +840,14 @@ st.markdown("---")
 # ---------------------------------------------------------
 @st.dialog("Direct Message Pitch Generator")
 def show_outreach_pitch_dialog(acc):
-    st.markdown(f"### 💬 Outreach Pitch for @{acc['username']}")
+    st.markdown(f"### Outreach Pitch for @{acc['username']}")
     name = acc['full_name'] or acc['username']
     matched_kws = acc['matched_keywords'] or 'your profile'
     
     pitch_style = st.selectbox("Pitch Style", ["Professional Collaboration", "Casual Sales DM", "Value First Offer"])
     
     if pitch_style == "Professional Collaboration":
-        pitch_text = f"Hey {name}! 👋 I noticed your profile and your awesome work around {matched_kws}. I love what you're building! Would love to connect and discuss potential synergies or collaborations. Let me know if you're open to a quick chat!"
+        pitch_text = f"Hey {name}! I noticed your profile and your work around {matched_kws}. I love what you're building! Would love to connect and discuss potential synergies or collaborations. Let me know if you're open to a quick chat!"
     elif pitch_style == "Casual Sales DM":
         pitch_text = f"Hi {name}! Came across your page while exploring top profiles in {matched_kws}. Impressive bio! We've helped creators & brands in your niche scale efficiently. Would you be open to seeing a 2-min breakdown of how?"
     else:
@@ -886,11 +863,11 @@ def show_account_details_dialog(acc):
     
     cat = acc['category']
     if cat == "QUALIFIED":
-        st.markdown("**Status:** <span class='badge badge-qualified'>Qualified</span>", unsafe_allow_html=True)
+        st.markdown("**Status:** <span class='badge badge-qualified'>QUALIFIED</span>", unsafe_allow_html=True)
     elif cat == "DOUBTFUL":
-        st.markdown("**Status:** <span class='badge badge-review'>Needs Review</span>", unsafe_allow_html=True)
+        st.markdown("**Status:** <span class='badge badge-review'>NEEDS REVIEW</span>", unsafe_allow_html=True)
     else:
-        st.markdown("**Status:** <span class='badge badge-unqualified'>Unqualified</span>", unsafe_allow_html=True)
+        st.markdown("**Status:** <span class='badge badge-unqualified'>UNQUALIFIED</span>", unsafe_allow_html=True)
 
     score_val = acc.get('match_score', 0)
     st.write(f"**Match Score:** {score_val:.0f}%")
@@ -905,13 +882,13 @@ def show_account_details_dialog(acc):
     st.markdown("---")
     c_d1, c_d2, c_d3 = st.columns(3)
     with c_d1:
-        st.link_button("Open Instagram ↗", f"https://www.instagram.com/{acc['username']}/", use_container_width=True)
+        st.link_button("Open Instagram", f"https://www.instagram.com/{acc['username']}/", use_container_width=True)
     with c_d2:
-        if st.button("Mark Qualified 🟢", use_container_width=True):
+        if st.button("Mark Qualified", use_container_width=True):
             update_account_category(acc['username'], "QUALIFIED")
             st.rerun()
     with c_d3:
-        if st.button("Delete Account 🗑️", use_container_width=True, type="primary"):
+        if st.button("Delete Account", use_container_width=True, type="primary"):
             delete_account(acc['username'])
             st.rerun()
 
@@ -943,11 +920,10 @@ tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
 def render_account_list(accounts_list, tab_key="all"):
     if not accounts_list:
         st.markdown("""
-        <div style="background: rgba(30, 41, 59, 0.4); border: 1px dashed #334155; border-radius: 12px; padding: 24px; text-align: center; margin: 1.5rem 0;">
-            <div style="font-size: 1.8rem; margin-bottom: 8px;">🎯</div>
-            <div style="font-size: 1.05rem; font-weight: 700; color: #F8FAFC;">No Accounts Evaluated for this Search Session</div>
-            <div style="font-size: 0.85rem; color: #94A3B8; margin-top: 4px;">
-                Enter a <b>Target Username</b> & <b>Keywords</b> above, then click <b>▶️ Start Search</b> to begin scanning!
+        <div style="background: rgba(13, 14, 18, 0.8); border: 1px dashed var(--border-subtle); border-radius: 8px; padding: 24px; text-align: center; margin: 1.5rem 0;">
+            <div style="font-size: 0.95rem; font-weight: 700; color: #F8FAFC; text-transform: uppercase; letter-spacing: 0.05em;">No Accounts Evaluated for this Search Session</div>
+            <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 6px;">
+                Enter a <b>Target Username</b> and <b>Keywords</b> above, then click <b>Start Search</b> to begin scanning!
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -962,20 +938,20 @@ def render_account_list(accounts_list, tab_key="all"):
     for acc in accounts_list:
         cat = acc["category"]
         if cat == "QUALIFIED":
-            badge_html = '<span class="badge badge-qualified">🟢 Qualified</span>'
+            badge_html = '<span class="badge badge-qualified">QUALIFIED</span>'
         elif cat == "DOUBTFUL":
-            badge_html = '<span class="badge badge-review">🟡 Needs Review</span>'
+            badge_html = '<span class="badge badge-review">NEEDS REVIEW</span>'
         else:
-            badge_html = '<span class="badge badge-unqualified">🔴 Unqualified</span>'
+            badge_html = '<span class="badge badge-unqualified">UNQUALIFIED</span>'
 
         score_val = acc.get("match_score", 0.0)
         bio_preview = (acc['bio'][:110] + "...") if acc['bio'] and len(acc['bio']) > 110 else (acc['bio'] or "No bio preview")
         
         contact_badges = ""
         if acc.get("email"):
-            contact_badges += f'<span class="badge badge-contact">✉️ {acc["email"]}</span> '
+            contact_badges += f'<span class="badge badge-contact">EMAIL: {acc["email"]}</span> '
         if acc.get("phone"):
-            contact_badges += f'<span class="badge badge-contact">📞 {acc["phone"]}</span> '
+            contact_badges += f'<span class="badge badge-contact">TEL: {acc["phone"]}</span> '
 
         with st.container():
             c_check, c_info, c_actions = st.columns([0.3, 3.8, 1.8])
@@ -993,7 +969,7 @@ def render_account_list(accounts_list, tab_key="all"):
                     f"**@{acc['username']}** &nbsp; "
                     f"<span style='color:#94A3B8;'>({acc['full_name'] or 'No Name'})</span> &nbsp; "
                     f"{badge_html} &nbsp; {contact_badges}"
-                    f"<span style='font-size:0.8rem; color:#818CF8; font-weight:600;'>Match: {score_val:.0f}%</span>", 
+                    f"<span style='font-size:0.78rem; color:#FCA5A5; font-weight:700;'>MATCH: {score_val:.0f}%</span>", 
                     unsafe_allow_html=True
                 )
                 st.caption(f"Bio: {bio_preview} | Followers: {acc['follower_count']:,} | Matched: {acc['matched_keywords'] or 'None'}")
@@ -1009,7 +985,7 @@ def render_account_list(accounts_list, tab_key="all"):
                         st.session_state.selected_usernames.discard(acc['username'])
                         st.rerun()
                 with ac3:
-                    if st.button("💬 DM Pitch", key=f"pitch_{tab_key}_{acc['username']}", use_container_width=True):
+                    if st.button("DM Pitch", key=f"pitch_{tab_key}_{acc['username']}", use_container_width=True):
                         show_outreach_pitch_dialog(acc)
 
 with tab_all:

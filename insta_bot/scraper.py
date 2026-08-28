@@ -112,15 +112,39 @@ class InstagramAgentEngine:
                     if user_id_part and user_id_part.isdigit():
                         L.context._session.cookies.set("ds_user_id", user_id_part, domain=domain)
 
+                real_user = None
                 if user_id_part and user_id_part.isdigit():
-                    self.username = f"user_{user_id_part}"
+                    try:
+                        prof = instaloader.Profile.from_id(L.context, int(user_id_part))
+                        real_user = prof.username
+                    except Exception:
+                        pass
 
-                self.client = L
-                self.backend = "instaloader"
-                self.log("🎉 Session ID Cookie Accepted & Connected!")
-                return True
+                if not real_user:
+                    try:
+                        test_u = L.test_login()
+                        if test_u:
+                            real_user = test_u
+                    except Exception:
+                        pass
+
+                if real_user:
+                    self.username = real_user
+                    self.client = L
+                    self.backend = "instaloader"
+                    self.log(f"Session Cookie Verified! Connected as @{self.username}")
+                    return True
+                elif user_id_part and user_id_part.isdigit():
+                    self.username = f"id_{user_id_part}"
+                    self.client = L
+                    self.backend = "instaloader"
+                    self.log(f"Session Cookie Accepted for User ID: {user_id_part}")
+                    return True
+                else:
+                    self.log("Authentication Failed: Session Cookie invalid or expired.")
+                    return False
             except Exception as e:
-                self.log(f"❌ Session Cookie Error: {e}")
+                self.log(f"Session Cookie Verification Error: {e}")
                 return False
 
         # 2. Check for saved native session file
