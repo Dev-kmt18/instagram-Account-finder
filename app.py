@@ -24,7 +24,7 @@ st.set_page_config(
 # Initialize Database (WAL mode & auto-migrations)
 init_db()
 
-# Custom Styling (Pure Dark Theme, Google Sheets Data Grid Aesthetics & Clean Enterprise UI)
+# Custom Styling (Pure Dark Theme, Zero Gap Google Sheets Data Grid Aesthetics & Clean Enterprise UI)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
@@ -171,16 +171,21 @@ st.markdown("""
         border: 1px solid #374151 !important;
     }
 
-    /* Agent Status Tag & Cyclist Animation */
-    @keyframes cycleAnim {
-        0% { transform: translateX(0px); }
-        50% { transform: translateX(6px); }
-        100% { transform: translateX(0px); }
+    /* Glowing Radar Pulse Scanner Animation */
+    @keyframes radarPulse {
+        0% { transform: scale(0.85); opacity: 0.7; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
+        50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+        100% { transform: scale(0.85); opacity: 0.7; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
-    .cyclist-icon {
+    .pulse-dot {
         display: inline-block;
-        font-size: 1.05rem;
-        animation: cycleAnim 0.7s infinite ease-in-out;
+        width: 8px;
+        height: 8px;
+        background-color: #EF4444;
+        border-radius: 50%;
+        animation: radarPulse 1.2s infinite ease-in-out;
+        vertical-align: middle;
+        margin-right: 6px;
     }
 
     .running-tag {
@@ -194,7 +199,6 @@ st.markdown("""
         letter-spacing: 0.05em;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
     }
     .paused-tag {
         background: rgba(245, 158, 11, 0.15);
@@ -207,7 +211,7 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
 
-    /* STICKY RUNNING STATUS INDICATOR WITH ANIMATED CYCLIST (STAYS VISIBLE ON SCROLL) */
+    /* STICKY RUNNING STATUS INDICATOR WITH RADAR PULSE (STAYS VISIBLE ON SCROLL) */
     .sticky-running-indicator {
         position: fixed;
         top: 12px;
@@ -224,7 +228,6 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(185, 28, 28, 0.45);
         display: flex;
         align-items: center;
-        gap: 8px;
         backdrop-filter: blur(8px);
     }
 
@@ -262,32 +265,36 @@ st.markdown("""
         margin-top: 4px;
     }
 
-    /* Google Sheets Spreadsheet Data Grid Styling */
+    /* Zero Vertical Gap Google Sheets Data Grid Table Styling */
+    .stTabs [data-testid="stVerticalBlock"] {
+        gap: 0rem !important;
+    }
+    
     .sheet-grid-header {
         background-color: #161B22 !important;
         border: 1px solid rgba(255, 255, 255, 0.15) !important;
-        padding: 5px 8px !important;
+        padding: 6px 10px !important;
         font-size: 0.72rem !important;
         font-weight: 700 !important;
         color: #94A3B8 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.04em !important;
     }
+    
     .sheet-grid-cell {
         background-color: #0A0C10 !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        padding: 4px 8px !important;
+        border: 1px solid rgba(255, 255, 255, 0.07) !important;
+        padding: 5px 10px !important;
         font-size: 0.82rem !important;
         color: #E2E8F0 !important;
         display: flex;
         align-items: center;
         overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        height: 38px !important;
     }
-    .sheet-grid-row:hover .sheet-grid-cell {
-        background-color: #13161D !important;
-        border-color: rgba(185, 28, 28, 0.3) !important;
-    }
-
+    
     /* Primary vs Ghost Buttons */
     div.stButton > button[kind="primary"] {
         background-color: var(--accent) !important;
@@ -409,11 +416,11 @@ if st.session_state.is_running and not st.session_state.is_paused:
 
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 
-# STICKY RUNNING STATUS INDICATOR WITH ANIMATED CYCLIST (STAYS VISIBLE ON SCROLL)
+# STICKY RUNNING STATUS INDICATOR WITH RADAR PULSE (STAYS VISIBLE ON SCROLL)
 if st.session_state.is_running and not st.session_state.is_paused:
     st.markdown(
         '<div class="sticky-running-indicator">'
-        '<span class="cyclist-icon">🚴💨</span> SCANNING ACTIVE...'
+        '<span class="pulse-dot"></span> SCANNING ACTIVE...'
         '</div>',
         unsafe_allow_html=True
     )
@@ -423,7 +430,7 @@ if st.session_state.is_running and not st.session_state.is_paused:
 # ---------------------------------------------------------
 status_badge_html = ""
 if st.session_state.is_running and not st.session_state.is_paused:
-    status_badge_html = '<span class="running-tag"><span class="cyclist-icon">🚴💨</span> [SCANNING ACTIVE]</span>'
+    status_badge_html = '<span class="running-tag"><span class="pulse-dot"></span> SCANNING ACTIVE</span>'
 elif st.session_state.is_running and st.session_state.is_paused:
     status_badge_html = '<span class="paused-tag">[AGENT PAUSED]</span>'
 
@@ -694,26 +701,11 @@ else:
             st.text_input("Add Target Keyword", placeholder="Type keyword and press Enter (e.g. mbbs, kolkata)...", key="kw_input_field", on_change=on_add_kw, disabled=inputs_disabled)
             
             if st.session_state.kw_list:
-                st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); font-weight:700; margin-top:8px; margin-bottom:6px; text-transform:uppercase;'>Active Target Keywords:</div>", unsafe_allow_html=True)
                 chip_cols = st.columns(8)
                 for idx, kw in enumerate(list(st.session_state.kw_list)):
                     c_idx = idx % 8
                     if chip_cols[c_idx].button(f"{kw} ✕", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
                         st.session_state.kw_list.remove(kw)
-                        st.rerun()
-                
-                if st.button("Clear All Keywords", key="clr_pos_kws", disabled=inputs_disabled):
-                    st.session_state.kw_list = []
-                    st.rerun()
-
-            recent_to_show = [rk for rk in st.session_state.recent_keywords if rk not in st.session_state.kw_list]
-            if recent_to_show:
-                st.markdown("<div style='font-size:0.72rem; color:var(--text-secondary); margin-top:8px;'>Quick Re-Add Recent:</div>", unsafe_allow_html=True)
-                rec_cols = st.columns(8)
-                for idx, rkw in enumerate(recent_to_show[:8]):
-                    c_idx = idx % 8
-                    if rec_cols[c_idx].button(f"+ {rkw}", key=f"add_rec_kw_{idx}_{rkw}", disabled=inputs_disabled):
-                        st.session_state.kw_list.append(rkw)
                         st.rerun()
 
         with tab_cfg_limits:
@@ -753,17 +745,12 @@ else:
             st.text_input("Exclude Keyword (Blacklist)", placeholder="Add blacklist words (e.g. crypto, agency)...", key="neg_kw_input_field", on_change=on_add_neg_kw, disabled=inputs_disabled)
             
             if st.session_state.neg_kw_list:
-                st.markdown("<div style='font-size:0.72rem; color:#F87171; font-weight:700; margin-top:4px; text-transform:uppercase;'>Active Blacklist Words:</div>", unsafe_allow_html=True)
                 neg_chip_cols = st.columns(8)
                 for idx, kw in enumerate(list(st.session_state.neg_kw_list)):
                     c_idx = idx % 8
                     if neg_chip_cols[c_idx].button(f"{kw} ✕", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
                         st.session_state.neg_kw_list.remove(kw)
                         st.rerun()
-                
-                if st.button("Clear Blacklist", key="clr_neg_kws", disabled=inputs_disabled):
-                    st.session_state.neg_kw_list = []
-                    st.rerun()
 
     # SECONDARY CONTROLS TOOLBAR
     ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1, 1, 1, 1])
@@ -1011,7 +998,7 @@ def confirm_batch_delete_dialog(usernames):
             st.rerun()
 
 # ---------------------------------------------------------
-# 7. GOOGLE SHEETS SPREADSHEET GRID RESULTS UI
+# 7. ZERO-GAP GOOGLE SHEETS SPREADSHEET GRID RESULTS UI
 # ---------------------------------------------------------
 tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "All Results",
@@ -1042,7 +1029,7 @@ def render_account_list(accounts_list, tab_key="all"):
     # Google Sheets Spreadsheet Grid Table Header
     t_h1, t_h2, t_h3, t_h4, t_h5 = st.columns([0.4, 3.4, 1.4, 0.8, 1.6])
     with t_h1:
-        st.markdown("<div class='sheet-grid-header'>SEL</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sheet-grid-header'>SELECT</div>", unsafe_allow_html=True)
     with t_h2:
         st.markdown("<div class='sheet-grid-header'>ACCOUNT USERNAME & NAME</div>", unsafe_allow_html=True)
     with t_h3:
@@ -1052,7 +1039,7 @@ def render_account_list(accounts_list, tab_key="all"):
     with t_h5:
         st.markdown("<div class='sheet-grid-header'>ACTIONS</div>", unsafe_allow_html=True)
 
-    # Google Sheets Grid Rows
+    # Google Sheets Grid Rows (Zero Vertical Gap Seamless Sheet Layout)
     for acc in accounts_list:
         cat = acc["category"]
         if cat == "QUALIFIED":
@@ -1064,37 +1051,36 @@ def render_account_list(accounts_list, tab_key="all"):
 
         score_val = acc.get("match_score", 0.0)
 
-        with st.container():
-            c_check, c_user, c_stat, c_score, c_actions = st.columns([0.4, 3.4, 1.4, 0.8, 1.6])
-            
-            with c_check:
-                is_selected = acc['username'] in st.session_state.selected_usernames
-                chk = st.checkbox(f"Select @{acc['username']}", value=is_selected, key=f"chk_{tab_key}_{acc['username']}", label_visibility="collapsed")
-                if chk:
-                    st.session_state.selected_usernames.add(acc['username'])
-                else:
+        c_check, c_user, c_stat, c_score, c_actions = st.columns([0.4, 3.4, 1.4, 0.8, 1.6])
+        
+        with c_check:
+            is_selected = acc['username'] in st.session_state.selected_usernames
+            chk = st.checkbox(f"Select @{acc['username']}", value=is_selected, key=f"chk_{tab_key}_{acc['username']}", label_visibility="collapsed")
+            if chk:
+                st.session_state.selected_usernames.add(acc['username'])
+            else:
+                st.session_state.selected_usernames.discard(acc['username'])
+
+        with c_user:
+            full_name_str = f" <span style='color:#64748B; font-size:0.8rem;'>({acc['full_name']})</span>" if acc['full_name'] else ""
+            st.markdown(f"<div class='sheet-grid-cell'><b>@{acc['username']}</b>{full_name_str}</div>", unsafe_allow_html=True)
+
+        with c_stat:
+            st.markdown(f"<div class='sheet-grid-cell'>{badge_html}</div>", unsafe_allow_html=True)
+
+        with c_score:
+            st.markdown(f"<div class='sheet-grid-cell'><span style='font-family:\"JetBrains Mono\", monospace; font-weight:700; color:#F8FAFC;'>{score_val:.0f}%</span></div>", unsafe_allow_html=True)
+
+        with c_actions:
+            ac1, ac2 = st.columns([1, 1])
+            with ac1:
+                if st.button("Details", key=f"det_{tab_key}_{acc['username']}", use_container_width=True):
+                    show_account_details_dialog(acc)
+            with ac2:
+                if st.button("Delete", key=f"del_{tab_key}_{acc['username']}", use_container_width=True):
+                    delete_account(acc['username'])
                     st.session_state.selected_usernames.discard(acc['username'])
-
-            with c_user:
-                full_name_str = f" <span style='color:#64748B; font-size:0.8rem;'>({acc['full_name']})</span>" if acc['full_name'] else ""
-                st.markdown(f"<div class='sheet-grid-cell'><b>@{acc['username']}</b>{full_name_str}</div>", unsafe_allow_html=True)
-
-            with c_stat:
-                st.markdown(f"<div class='sheet-grid-cell'>{badge_html}</div>", unsafe_allow_html=True)
-
-            with c_score:
-                st.markdown(f"<div class='sheet-grid-cell'><span style='font-family:\"JetBrains Mono\", monospace; font-weight:700; color:#F8FAFC;'>{score_val:.0f}%</span></div>", unsafe_allow_html=True)
-
-            with c_actions:
-                ac1, ac2 = st.columns([1, 1])
-                with ac1:
-                    if st.button("Details", key=f"det_{tab_key}_{acc['username']}", use_container_width=True):
-                        show_account_details_dialog(acc)
-                with ac2:
-                    if st.button("Delete", key=f"del_{tab_key}_{acc['username']}", use_container_width=True):
-                        delete_account(acc['username'])
-                        st.session_state.selected_usernames.discard(acc['username'])
-                        st.rerun()
+                    st.rerun()
 
 with tab_all:
     render_account_list(filtered_accounts, tab_key="all")
