@@ -128,10 +128,9 @@ st.markdown("""
     }
     div[data-baseweb="popover"], div[data-baseweb="menu"], ul[role="listbox"] {
         background-color: #0D0E12 !important;
-        border: 1px solid rgba(185, 28, 28, 0.5) !important;
+        border: 1px solid rgba(185, 28, 28, 0.4) !important;
         border-radius: 6px !important;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85) !important;
-        z-index: 999999 !important;
     }
     li[role="option"] {
         background-color: #0D0E12 !important;
@@ -171,34 +170,30 @@ st.markdown("""
         border: 1px solid #374151 !important;
     }
 
-    /* Glowing Radar Pulse Scanner Animation */
-    @keyframes radarPulse {
+    /* Simple Glowing Pulse Dot Indicator */
+    @keyframes simplePulse {
         0% { transform: scale(0.85); opacity: 0.7; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
-        50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+        50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
         100% { transform: scale(0.85); opacity: 0.7; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
-    .pulse-dot {
+    .simple-pulse-dot {
         display: inline-block;
-        width: 8px;
-        height: 8px;
+        width: 10px;
+        height: 10px;
         background-color: #EF4444;
         border-radius: 50%;
-        animation: radarPulse 1.2s infinite ease-in-out;
-        vertical-align: middle;
-        margin-right: 6px;
+        animation: simplePulse 1.2s infinite ease-in-out;
     }
 
     .running-tag {
         background: rgba(185, 28, 28, 0.18);
         color: #FCA5A5;
         border: 1px solid rgba(185, 28, 28, 0.4);
-        padding: 5px 12px;
-        border-radius: 4px;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.05em;
+        padding: 6px 10px;
+        border-radius: 50%;
         display: inline-flex;
         align-items: center;
+        justify-content: center;
     }
     .paused-tag {
         background: rgba(245, 158, 11, 0.15);
@@ -211,23 +206,20 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
 
-    /* STICKY RUNNING STATUS INDICATOR WITH RADAR PULSE (STAYS VISIBLE ON SCROLL) */
+    /* STICKY SIMPLE PULSE DOT INDICATOR (STAYS VISIBLE ON SCROLL) */
     .sticky-running-indicator {
         position: fixed;
-        top: 12px;
+        top: 14px;
         right: 70px;
-        z-index: 999999;
+        z-index: 99999;
         background: rgba(139, 0, 0, 0.95);
-        color: #FFFFFF;
         border: 1px solid #B91C1C;
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.05em;
+        padding: 7px 11px;
+        border-radius: 50%;
         box-shadow: 0 4px 16px rgba(185, 28, 28, 0.45);
         display: flex;
         align-items: center;
+        justify-content: center;
         backdrop-filter: blur(8px);
     }
 
@@ -372,8 +364,7 @@ st.markdown("""
         .sticky-running-indicator {
             top: 8px !important;
             right: 12px !important;
-            font-size: 0.7rem !important;
-            padding: 4px 10px !important;
+            padding: 5px 9px !important;
         }
     }
 </style>
@@ -416,11 +407,11 @@ if st.session_state.is_running and not st.session_state.is_paused:
 
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 
-# STICKY RUNNING STATUS INDICATOR WITH RADAR PULSE (STAYS VISIBLE ON SCROLL)
+# STICKY RUNNING STATUS INDICATOR WITH SIMPLE PULSE DOT (STAYS VISIBLE ON SCROLL)
 if st.session_state.is_running and not st.session_state.is_paused:
     st.markdown(
-        '<div class="sticky-running-indicator">'
-        '<span class="pulse-dot"></span> SCANNING ACTIVE...'
+        '<div class="sticky-running-indicator" title="Search Crawl Active">'
+        '<span class="simple-pulse-dot"></span>'
         '</div>',
         unsafe_allow_html=True
     )
@@ -430,7 +421,7 @@ if st.session_state.is_running and not st.session_state.is_paused:
 # ---------------------------------------------------------
 status_badge_html = ""
 if st.session_state.is_running and not st.session_state.is_paused:
-    status_badge_html = '<span class="running-tag"><span class="pulse-dot"></span> SCANNING ACTIVE</span>'
+    status_badge_html = '<span class="running-tag" title="Search Crawl Active"><span class="simple-pulse-dot"></span></span>'
 elif st.session_state.is_running and st.session_state.is_paused:
     status_badge_html = '<span class="paused-tag">[AGENT PAUSED]</span>'
 
@@ -595,13 +586,22 @@ else:
         pending_queue_count = get_pending_queue_count()
         if not st.session_state.is_running:
             if st.button("Start Search", use_container_width=True, type="primary"):
-                final_kws = list(st.session_state.kw_list)
+                final_kws = []
                 typed_kw = st.session_state.get("kw_input_field", "").strip()
                 if typed_kw:
                     for k in typed_kw.split(","):
                         clean_k = k.strip().lower()
                         if clean_k and clean_k not in final_kws:
                             final_kws.append(clean_k)
+
+                final_neg_kws = []
+                typed_neg_kw = st.session_state.get("neg_kw_input_field", "").strip()
+                if typed_neg_kw:
+                    for k in typed_neg_kw.split(","):
+                        clean_k = k.strip().lower()
+                        if clean_k and clean_k not in final_neg_kws:
+                            final_neg_kws.append(clean_k)
+                st.session_state.neg_kw_list = final_neg_kws
 
                 if not target_username and pending_queue_count == 0:
                     st.error("Please enter Target Username!")
@@ -655,7 +655,7 @@ else:
                     t = threading.Thread(
                         target=run_thread,
                         args=(
-                            engine_ref, target_username, final_kws, st.session_state.neg_kw_list,
+                            engine_ref, target_username, final_kws, final_neg_kws,
                             val_max_limit, search_mode, val_crawl_depth, val_stop_mode, val_match_logic,
                             val_min_f, val_max_f, val_inc_priv
                         ),
@@ -672,7 +672,7 @@ else:
                         st.session_state.engine.is_paused = False
                     st.rerun()
             else:
-                st.button("Scanning Active...", use_container_width=True, disabled=True)
+                st.button("●", use_container_width=True, disabled=True, help="Search Crawl Active")
 
     # ADVANCED CONFIGURATION AREA (COLLAPSIBLE TABS)
     with st.expander("Advanced Settings & Keyword Filters", expanded=True):
@@ -684,29 +684,14 @@ else:
         ])
 
         with tab_cfg_kws:
-            def on_add_kw():
-                val = st.session_state.get("kw_input_field", "").strip()
-                if val:
-                    if "," in val:
-                        parts = [k.strip().lower() for k in val.split(",") if k.strip()]
-                    else:
-                        parts = [val.lower()]
-                    for p in parts:
-                        if p not in st.session_state.kw_list:
-                            st.session_state.kw_list.append(p)
-                        if p not in st.session_state.recent_keywords:
-                            st.session_state.recent_keywords.append(p)
-                    st.session_state["kw_input_field"] = ""
-
-            st.text_input("Add Target Keyword", placeholder="Type keyword and press Enter (e.g. mbbs, kolkata)...", key="kw_input_field", on_change=on_add_kw, disabled=inputs_disabled)
-            
-            if st.session_state.kw_list:
-                chip_cols = st.columns(8)
-                for idx, kw in enumerate(list(st.session_state.kw_list)):
-                    c_idx = idx % 8
-                    if chip_cols[c_idx].button(f"{kw} ✕", key=f"del_pos_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
-                        st.session_state.kw_list.remove(kw)
-                        st.rerun()
+            st.text_input(
+                "Target Keywords (comma-separated)",
+                value=", ".join(st.session_state.kw_list) if st.session_state.kw_list else "",
+                placeholder="Type target keywords separated by commas (e.g. mbbs, kolkata, doctor)...",
+                key="kw_input_field",
+                disabled=inputs_disabled,
+                help="Type target keywords directly in this box separated by commas. All words inside this box will be matched!"
+            )
 
         with tab_cfg_limits:
             cfg_l1, cfg_l2, cfg_l3, cfg_l4 = st.columns(4)
@@ -730,27 +715,14 @@ else:
                 include_private = st.checkbox("Include Private Profiles", value=True, key="cfg_inc_private", disabled=inputs_disabled)
 
         with tab_cfg_neg:
-            def on_add_neg_kw():
-                val = st.session_state.get("neg_kw_input_field", "").strip()
-                if val:
-                    if "," in val:
-                        parts = [k.strip().lower() for k in val.split(",") if k.strip()]
-                    else:
-                        parts = [val.lower()]
-                    for p in parts:
-                        if p not in st.session_state.neg_kw_list:
-                            st.session_state.neg_kw_list.append(p)
-                    st.session_state["neg_kw_input_field"] = ""
-
-            st.text_input("Exclude Keyword (Blacklist)", placeholder="Add blacklist words (e.g. crypto, agency)...", key="neg_kw_input_field", on_change=on_add_neg_kw, disabled=inputs_disabled)
-            
-            if st.session_state.neg_kw_list:
-                neg_chip_cols = st.columns(8)
-                for idx, kw in enumerate(list(st.session_state.neg_kw_list)):
-                    c_idx = idx % 8
-                    if neg_chip_cols[c_idx].button(f"{kw} ✕", key=f"del_neg_kw_{idx}_{kw}", disabled=inputs_disabled, help=f"Remove '{kw}'"):
-                        st.session_state.neg_kw_list.remove(kw)
-                        st.rerun()
+            st.text_input(
+                "Exclude Keywords (Blacklist, comma-separated)",
+                value=", ".join(st.session_state.neg_kw_list) if st.session_state.neg_kw_list else "",
+                placeholder="Type blacklist words separated by commas (e.g. crypto, agency)...",
+                key="neg_kw_input_field",
+                disabled=inputs_disabled,
+                help="Type blacklist words directly in this box separated by commas. Accounts with any of these words will be disqualified!"
+            )
 
     # SECONDARY CONTROLS TOOLBAR
     ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([1, 1, 1, 1])
