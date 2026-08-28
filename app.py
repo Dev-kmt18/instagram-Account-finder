@@ -24,7 +24,7 @@ st.set_page_config(
 # Initialize Database (WAL mode & auto-migrations)
 init_db()
 
-# Custom Styling (Pure Dark Theme with Dark Red Accent & Clean Enterprise Aesthetics)
+# Custom Styling (Pure Dark Theme with Dark Red Accent & Ultra-Compact Table Aesthetics)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
@@ -115,7 +115,7 @@ st.markdown("""
         box-shadow: 0 0 0 2px var(--accent-glow) !important;
     }
 
-    /* Status Badges with Dark Semantic Fill */
+    /* Status Badges */
     .badge {
         display: inline-flex;
         align-items: center;
@@ -141,15 +141,19 @@ st.markdown("""
         color: #9CA3AF !important;
         border: 1px solid #374151 !important;
     }
-    .badge-contact {
-        background-color: rgba(139, 0, 0, 0.25);
-        color: #FCA5A5;
-        border: 1px solid rgba(185, 28, 28, 0.5);
-        font-size: 0.72rem;
-        padding: 2px 7px;
+
+    /* Agent Status Tag & Cyclist Animation */
+    @keyframes cycleAnim {
+        0% { transform: translateX(0px); }
+        50% { transform: translateX(6px); }
+        100% { transform: translateX(0px); }
+    }
+    .cyclist-icon {
+        display: inline-block;
+        font-size: 1.05rem;
+        animation: cycleAnim 0.7s infinite ease-in-out;
     }
 
-    /* Agent Status Tag */
     .running-tag {
         background: rgba(185, 28, 28, 0.18);
         color: #FCA5A5;
@@ -159,6 +163,9 @@ st.markdown("""
         font-size: 0.78rem;
         font-weight: 700;
         letter-spacing: 0.05em;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
     .paused-tag {
         background: rgba(245, 158, 11, 0.15);
@@ -171,7 +178,7 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
 
-    /* STICKY RUNNING STATUS INDICATOR (STAYS VISIBLE ON SCROLL) */
+    /* STICKY RUNNING STATUS INDICATOR WITH CYCLIST ANIMATION (STAYS VISIBLE ON SCROLL) */
     .sticky-running-indicator {
         position: fixed;
         top: 12px;
@@ -190,22 +197,6 @@ st.markdown("""
         align-items: center;
         gap: 8px;
         backdrop-filter: blur(8px);
-    }
-
-    @keyframes spinPulse {
-        0% { transform: rotate(0deg) scale(1); }
-        50% { transform: rotate(180deg) scale(1.15); }
-        100% { transform: rotate(360deg) scale(1); }
-    }
-
-    .spinner-icon {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border: 2px solid #FFFFFF;
-        border-top-color: transparent;
-        border-radius: 50%;
-        animation: spinPulse 0.8s linear infinite;
     }
 
     /* Unified Stat Bar */
@@ -240,6 +231,18 @@ st.markdown("""
         letter-spacing: 0.06em;
         color: var(--text-secondary);
         margin-top: 4px;
+    }
+
+    /* Ultra-Compact Table Layout Rules */
+    .compact-table-row {
+        background: var(--bg-surface);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 6px 10px;
+        margin-bottom: 4px;
+        border-radius: 4px;
+    }
+    .compact-table-row:hover {
+        background: var(--bg-surface-elevated);
     }
 
     /* Primary vs Ghost Buttons */
@@ -363,11 +366,11 @@ if st.session_state.is_running and not st.session_state.is_paused:
 
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
 
-# STICKY RUNNING STATUS INDICATOR (STAYS VISIBLE ON SCROLL)
+# STICKY RUNNING STATUS INDICATOR WITH ANIMATED CYCLIST (STAYS VISIBLE ON SCROLL)
 if st.session_state.is_running and not st.session_state.is_paused:
     st.markdown(
         '<div class="sticky-running-indicator">'
-        '<span class="spinner-icon"></span> SCANNING ACTIVE...'
+        '<span class="cyclist-icon">🚴💨</span> SCANNING ACTIVE...'
         '</div>',
         unsafe_allow_html=True
     )
@@ -377,7 +380,7 @@ if st.session_state.is_running and not st.session_state.is_paused:
 # ---------------------------------------------------------
 status_badge_html = ""
 if st.session_state.is_running and not st.session_state.is_paused:
-    status_badge_html = '<span class="running-tag">[AGENT ACTIVE & SCANNING]</span>'
+    status_badge_html = '<span class="running-tag"><span class="cyclist-icon">🚴💨</span> [SCANNING ACTIVE]</span>'
 elif st.session_state.is_running and st.session_state.is_paused:
     status_badge_html = '<span class="paused-tag">[AGENT PAUSED]</span>'
 
@@ -890,8 +893,8 @@ def show_account_details_dialog(acc):
 
     score_val = acc.get('match_score', 0)
     st.write(f"**Match Score:** {score_val:.0f}%")
-    st.write(f"**Extracted Email:** `{acc.get('email') or 'None'}`")
-    st.write(f"**Extracted Phone:** `{acc.get('phone') or 'None'}`")
+    st.write(f"**Extracted Email:** `{acc.get('email') or 'Not Extracted'}`")
+    st.write(f"**Extracted Phone:** `{acc.get('phone') or 'Not Extracted'}`")
     st.write(f"**Matched Keywords:** {acc['matched_keywords'] or 'None'}")
     st.write(f"**Bio:** {acc['bio'] or 'No bio text'}")
     st.write(f"**Followers:** {acc['follower_count']:,} | **Following:** {acc['following_count']:,}")
@@ -926,7 +929,7 @@ def confirm_batch_delete_dialog(usernames):
             st.rerun()
 
 # ---------------------------------------------------------
-# 7. STRUCTURED TABLE RESULTS UI
+# 7. ULTRA-COMPACT STRUCTURED TABLE RESULTS UI
 # ---------------------------------------------------------
 tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "All Results",
@@ -955,7 +958,7 @@ def render_account_list(accounts_list, tab_key="all"):
             confirm_batch_delete_dialog(list(st.session_state.selected_usernames))
 
     # Structured Table Header Row
-    t_h1, t_h2, t_h3, t_h4, t_h5, t_h6 = st.columns([0.4, 2.8, 1.3, 0.8, 1.7, 1.6])
+    t_h1, t_h2, t_h3, t_h4, t_h5 = st.columns([0.4, 3.4, 1.4, 0.8, 1.6])
     with t_h1:
         st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>SEL</div>", unsafe_allow_html=True)
     with t_h2:
@@ -965,13 +968,11 @@ def render_account_list(accounts_list, tab_key="all"):
     with t_h4:
         st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>MATCH</div>", unsafe_allow_html=True)
     with t_h5:
-        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>CONTACTS</div>", unsafe_allow_html=True)
-    with t_h6:
         st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>ACTIONS</div>", unsafe_allow_html=True)
     
-    st.markdown("<div style='border-bottom: 1px solid var(--border-subtle); margin-bottom: 10px; margin-top: 4px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='border-bottom: 1px solid var(--border-subtle); margin-bottom: 6px; margin-top: 4px;'></div>", unsafe_allow_html=True)
 
-    # Table Row Items
+    # Ultra-Compact Table Rows (Zero Extra Vertical Spacing)
     for acc in accounts_list:
         cat = acc["category"]
         if cat == "QUALIFIED":
@@ -982,17 +983,9 @@ def render_account_list(accounts_list, tab_key="all"):
             badge_html = '<span class="badge badge-unqualified">UNQUALIFIED</span>'
 
         score_val = acc.get("match_score", 0.0)
-        
-        contact_badges = ""
-        if acc.get("email"):
-            contact_badges += f'<span class="badge badge-contact">EMAIL: {acc["email"]}</span> '
-        if acc.get("phone"):
-            contact_badges += f'<span class="badge badge-contact">TEL: {acc["phone"]}</span> '
-        if not contact_badges:
-            contact_badges = '<span style="color:#64748B; font-size:0.78rem;">-</span>'
 
         with st.container():
-            c_check, c_user, c_stat, c_score, c_contact, c_actions = st.columns([0.4, 2.8, 1.3, 0.8, 1.7, 1.6])
+            c_check, c_user, c_stat, c_score, c_actions = st.columns([0.4, 3.4, 1.4, 0.8, 1.6])
             
             with c_check:
                 is_selected = acc['username'] in st.session_state.selected_usernames
@@ -1011,9 +1004,6 @@ def render_account_list(accounts_list, tab_key="all"):
 
             with c_score:
                 st.markdown(f"<span style='font-family:\"JetBrains Mono\", monospace; font-weight:700; font-size:0.85rem; color:#F8FAFC;'>{score_val:.0f}%</span>", unsafe_allow_html=True)
-
-            with c_contact:
-                st.markdown(contact_badges, unsafe_allow_html=True)
 
             with c_actions:
                 ac1, ac2 = st.columns([1, 1])
