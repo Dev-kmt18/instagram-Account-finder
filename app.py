@@ -397,7 +397,13 @@ if "selected_search_id" not in st.session_state:
     st.session_state.selected_search_id = None
 
 # Synchronize state with background engine actively
-if st.session_state.engine:
+thread_alive = st.session_state.crawl_thread is not None and st.session_state.crawl_thread.is_alive()
+if not thread_alive:
+    st.session_state.is_running = False
+    if st.session_state.engine:
+        st.session_state.engine.is_running = False
+
+if st.session_state.engine and thread_alive:
     st.session_state.is_running = st.session_state.engine.is_running
     st.session_state.is_paused = st.session_state.engine.is_paused
 
@@ -1077,6 +1083,8 @@ with tab_logs:
         st.info("System is idle. Start a search session to begin scanning.")
 
 # Sync state
-if st.session_state.engine:
+if st.session_state.engine and thread_alive:
     st.session_state.is_running = st.session_state.engine.is_running
     st.session_state.is_paused = st.session_state.engine.is_paused
+else:
+    st.session_state.is_running = False
