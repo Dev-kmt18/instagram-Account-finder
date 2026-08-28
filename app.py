@@ -115,7 +115,7 @@ st.markdown("""
         box-shadow: 0 0 0 2px var(--accent-glow) !important;
     }
 
-    /* Status Badges */
+    /* Status Badges with Dark Semantic Fill */
     .badge {
         display: inline-flex;
         align-items: center;
@@ -142,9 +142,9 @@ st.markdown("""
         border: 1px solid #374151 !important;
     }
     .badge-contact {
-        background-color: rgba(139, 0, 0, 0.18);
+        background-color: rgba(139, 0, 0, 0.25);
         color: #FCA5A5;
-        border: 1px solid rgba(185, 28, 28, 0.4);
+        border: 1px solid rgba(185, 28, 28, 0.5);
         font-size: 0.72rem;
         padding: 2px 7px;
     }
@@ -169,6 +169,43 @@ st.markdown("""
         font-size: 0.78rem;
         font-weight: 700;
         letter-spacing: 0.05em;
+    }
+
+    /* STICKY RUNNING STATUS INDICATOR (STAYS VISIBLE ON SCROLL) */
+    .sticky-running-indicator {
+        position: fixed;
+        top: 12px;
+        right: 70px;
+        z-index: 999999;
+        background: rgba(139, 0, 0, 0.95);
+        color: #FFFFFF;
+        border: 1px solid #B91C1C;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        box-shadow: 0 4px 16px rgba(185, 28, 28, 0.45);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        backdrop-filter: blur(8px);
+    }
+
+    @keyframes spinPulse {
+        0% { transform: rotate(0deg) scale(1); }
+        50% { transform: rotate(180deg) scale(1.15); }
+        100% { transform: rotate(360deg) scale(1); }
+    }
+
+    .spinner-icon {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border: 2px solid #FFFFFF;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spinPulse 0.8s linear infinite;
     }
 
     /* Unified Stat Bar */
@@ -203,19 +240,6 @@ st.markdown("""
         letter-spacing: 0.06em;
         color: var(--text-secondary);
         margin-top: 4px;
-    }
-
-    /* Lead Card Container */
-    .lead-card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
-        padding: 14px 16px;
-        margin-bottom: 8px;
-        transition: border-color 0.15s ease;
-    }
-    .lead-card:hover {
-        border-color: var(--border-hover);
     }
 
     /* Primary vs Ghost Buttons */
@@ -292,6 +316,12 @@ st.markdown("""
         .stButton button {
             width: 100% !important;
         }
+        .sticky-running-indicator {
+            top: 8px !important;
+            right: 12px !important;
+            font-size: 0.7rem !important;
+            padding: 4px 10px !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -332,6 +362,15 @@ if st.session_state.is_running and not st.session_state.is_paused:
     st_autorefresh(interval=2500, limit=None, key="crawl_auto_refresh")
 
 inputs_disabled = st.session_state.is_running and not st.session_state.is_paused
+
+# STICKY RUNNING STATUS INDICATOR (STAYS VISIBLE ON SCROLL)
+if st.session_state.is_running and not st.session_state.is_paused:
+    st.markdown(
+        '<div class="sticky-running-indicator">'
+        '<span class="spinner-icon"></span> SCANNING ACTIVE...'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
 # ---------------------------------------------------------
 # 1. HEADER
@@ -753,15 +792,15 @@ st.markdown(f"""
         <div class="stat-title">Total Evaluated</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num" style="color: #34D399;">{counts['qualified']:,}</div>
+        <div class="stat-num" style="color: #6EE7B7;">{counts['qualified']:,}</div>
         <div class="stat-title">Qualified Leads</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num" style="color: #FBBF24;">{counts['doubtful']:,}</div>
+        <div class="stat-num" style="color: #FDE68A;">{counts['doubtful']:,}</div>
         <div class="stat-title">Needs Review</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num" style="color: #FCA5A5;">{counts['unqualified']:,}</div>
+        <div class="stat-num" style="color: #9CA3AF;">{counts['unqualified']:,}</div>
         <div class="stat-title">Unqualified</div>
     </div>
     <div class="stat-item">
@@ -834,26 +873,8 @@ with f_col6:
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 6. MODAL DIALOGS (DETAILS, OUTREACH PITCH, DELETION)
+# 6. MODAL DIALOGS (ACCOUNT DETAILS & DELETION)
 # ---------------------------------------------------------
-@st.dialog("Direct Message Pitch Generator")
-def show_outreach_pitch_dialog(acc):
-    st.markdown(f"### Outreach Pitch for @{acc['username']}")
-    name = acc['full_name'] or acc['username']
-    matched_kws = acc['matched_keywords'] or 'your profile'
-    
-    pitch_style = st.selectbox("Pitch Style", ["Professional Collaboration", "Casual Sales DM", "Value First Offer"])
-    
-    if pitch_style == "Professional Collaboration":
-        pitch_text = f"Hey {name}! I noticed your profile and your work around {matched_kws}. I love what you're building! Would love to connect and discuss potential synergies or collaborations. Let me know if you're open to a quick chat!"
-    elif pitch_style == "Casual Sales DM":
-        pitch_text = f"Hi {name}! Came across your page while exploring top profiles in {matched_kws}. Impressive bio! We've helped creators & brands in your niche scale efficiently. Would you be open to seeing a 2-min breakdown of how?"
-    else:
-        pitch_text = f"Hey {name}, quick compliment on your page! Love your content on {matched_kws}. I put together some free growth insights specifically tailored for accounts like yours. Mind if I send it over here?"
-
-    st.text_area("Generated DM Pitch", value=pitch_text, height=140)
-    st.caption("Tip: Copy and paste this directly into your Instagram Direct Messages or Email outreach!")
-
 @st.dialog("Account Details")
 def show_account_details_dialog(acc):
     st.markdown(f"### @{acc['username']}")
@@ -905,14 +926,14 @@ def confirm_batch_delete_dialog(usernames):
             st.rerun()
 
 # ---------------------------------------------------------
-# 7. RESULTS LIST UI
+# 7. STRUCTURED TABLE RESULTS UI
 # ---------------------------------------------------------
 tab_all, tab_qual, tab_review, tab_unqual, tab_logs = st.tabs([
     "All Results",
     "Qualified",
     "Needs Review",
     "Unqualified",
-    "Live Logs"
+    "System Activity"
 ])
 
 def render_account_list(accounts_list, tab_key="all"):
@@ -933,6 +954,24 @@ def render_account_list(accounts_list, tab_key="all"):
         if st.button(f"Delete Selected ({num_sel})", disabled=num_sel == 0, key=f"btn_del_sel_{tab_key}", use_container_width=True):
             confirm_batch_delete_dialog(list(st.session_state.selected_usernames))
 
+    # Structured Table Header Row
+    t_h1, t_h2, t_h3, t_h4, t_h5, t_h6 = st.columns([0.4, 2.8, 1.3, 0.8, 1.7, 1.6])
+    with t_h1:
+        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>SEL</div>", unsafe_allow_html=True)
+    with t_h2:
+        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>ACCOUNT NAME</div>", unsafe_allow_html=True)
+    with t_h3:
+        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>CATEGORY</div>", unsafe_allow_html=True)
+    with t_h4:
+        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>MATCH</div>", unsafe_allow_html=True)
+    with t_h5:
+        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>CONTACTS</div>", unsafe_allow_html=True)
+    with t_h6:
+        st.markdown("<div style='font-size:0.7rem; font-weight:700; color:#94A3B8; text-transform:uppercase;'>ACTIONS</div>", unsafe_allow_html=True)
+    
+    st.markdown("<div style='border-bottom: 1px solid var(--border-subtle); margin-bottom: 10px; margin-top: 4px;'></div>", unsafe_allow_html=True)
+
+    # Table Row Items
     for acc in accounts_list:
         cat = acc["category"]
         if cat == "QUALIFIED":
@@ -943,16 +982,17 @@ def render_account_list(accounts_list, tab_key="all"):
             badge_html = '<span class="badge badge-unqualified">UNQUALIFIED</span>'
 
         score_val = acc.get("match_score", 0.0)
-        bio_preview = (acc['bio'][:110] + "...") if acc['bio'] and len(acc['bio']) > 110 else (acc['bio'] or "No bio preview")
         
         contact_badges = ""
         if acc.get("email"):
             contact_badges += f'<span class="badge badge-contact">EMAIL: {acc["email"]}</span> '
         if acc.get("phone"):
             contact_badges += f'<span class="badge badge-contact">TEL: {acc["phone"]}</span> '
+        if not contact_badges:
+            contact_badges = '<span style="color:#64748B; font-size:0.78rem;">-</span>'
 
         with st.container():
-            c_check, c_info, c_actions = st.columns([0.3, 3.8, 1.8])
+            c_check, c_user, c_stat, c_score, c_contact, c_actions = st.columns([0.4, 2.8, 1.3, 0.8, 1.7, 1.6])
             
             with c_check:
                 is_selected = acc['username'] in st.session_state.selected_usernames
@@ -962,18 +1002,21 @@ def render_account_list(accounts_list, tab_key="all"):
                 else:
                     st.session_state.selected_usernames.discard(acc['username'])
 
-            with c_info:
-                st.markdown(
-                    f"**@{acc['username']}** &nbsp; "
-                    f"<span style='color:#94A3B8;'>({acc['full_name'] or 'No Name'})</span> &nbsp; "
-                    f"{badge_html} &nbsp; {contact_badges}"
-                    f"<span style='font-size:0.78rem; color:#FCA5A5; font-weight:700;'>MATCH: {score_val:.0f}%</span>", 
-                    unsafe_allow_html=True
-                )
-                st.caption(f"Bio: {bio_preview} | Followers: {acc['follower_count']:,} | Matched: {acc['matched_keywords'] or 'None'}")
+            with c_user:
+                full_name_str = f" <span style='color:#64748B; font-size:0.8rem;'>({acc['full_name']})</span>" if acc['full_name'] else ""
+                st.markdown(f"**@{acc['username']}**{full_name_str}", unsafe_allow_html=True)
+
+            with c_stat:
+                st.markdown(badge_html, unsafe_allow_html=True)
+
+            with c_score:
+                st.markdown(f"<span style='font-family:\"JetBrains Mono\", monospace; font-weight:700; font-size:0.85rem; color:#F8FAFC;'>{score_val:.0f}%</span>", unsafe_allow_html=True)
+
+            with c_contact:
+                st.markdown(contact_badges, unsafe_allow_html=True)
 
             with c_actions:
-                ac1, ac2, ac3 = st.columns([1, 1, 1.2])
+                ac1, ac2 = st.columns([1, 1])
                 with ac1:
                     if st.button("Details", key=f"det_{tab_key}_{acc['username']}", use_container_width=True):
                         show_account_details_dialog(acc)
@@ -982,9 +1025,6 @@ def render_account_list(accounts_list, tab_key="all"):
                         delete_account(acc['username'])
                         st.session_state.selected_usernames.discard(acc['username'])
                         st.rerun()
-                with ac3:
-                    if st.button("DM Pitch", key=f"pitch_{tab_key}_{acc['username']}", use_container_width=True):
-                        show_outreach_pitch_dialog(acc)
 
 with tab_all:
     render_account_list(filtered_accounts, tab_key="all")
