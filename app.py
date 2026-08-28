@@ -594,12 +594,20 @@ else:
                                 eng.log(f"Crawl Error: {thread_err}")
                                 eng.is_running = False
 
+                    val_max_limit = st.session_state.get("cfg_max_limit", 1000)
+                    val_crawl_depth = st.session_state.get("cfg_crawl_depth", 1)
+                    val_match_logic = st.session_state.get("cfg_match_logic", "OR")
+                    val_stop_mode = "qualified" if "Qualified" in str(st.session_state.get("cfg_stop_mode", "")) else "total"
+                    val_min_f = st.session_state.get("cfg_min_followers", 0)
+                    val_max_f = st.session_state.get("cfg_max_followers", 0)
+                    val_inc_priv = st.session_state.get("cfg_inc_private", True)
+
                     t = threading.Thread(
                         target=run_thread,
                         args=(
                             engine_ref, target_username, final_kws, st.session_state.neg_kw_list,
-                            1000, search_mode, 1, "total", "OR",
-                            0, 0, True
+                            val_max_limit, search_mode, val_crawl_depth, val_stop_mode, val_match_logic,
+                            val_min_f, val_max_f, val_inc_priv
                         ),
                         daemon=True
                     )
@@ -668,23 +676,23 @@ else:
         with tab_cfg_limits:
             cfg_l1, cfg_l2, cfg_l3, cfg_l4 = st.columns(4)
             with cfg_l1:
-                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000, value=1000, step=50, disabled=inputs_disabled)
+                max_limit = st.number_input("Limit Count", min_value=1, max_value=10000, value=1000, step=50, key="cfg_max_limit", disabled=inputs_disabled)
             with cfg_l2:
-                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, disabled=inputs_disabled)
+                stop_mode_sel = st.selectbox("Stop Goal", ["Total Scanned", "Qualified Goal"], index=0, key="cfg_stop_mode", disabled=inputs_disabled)
             with cfg_l3:
-                crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1, disabled=inputs_disabled)
+                crawl_depth = st.number_input("Crawl Depth", min_value=1, max_value=2, value=1, step=1, key="cfg_crawl_depth", disabled=inputs_disabled)
             with cfg_l4:
-                match_logic = st.selectbox("Matching Logic", ["OR", "AND"], index=0, disabled=inputs_disabled)
+                match_logic = st.selectbox("Matching Logic", ["OR", "AND"], index=0, key="cfg_match_logic", disabled=inputs_disabled)
 
         with tab_cfg_filters:
             cfg_f1, cfg_f2, cfg_f3 = st.columns(3)
             with cfg_f1:
-                min_followers = st.number_input("Min Followers", min_value=0, value=0, step=100, disabled=inputs_disabled)
+                min_followers = st.number_input("Min Followers", min_value=0, value=0, step=100, key="cfg_min_followers", disabled=inputs_disabled)
             with cfg_f2:
-                max_followers = st.number_input("Max Followers (0=Unlimited)", min_value=0, value=0, step=1000, disabled=inputs_disabled)
+                max_followers = st.number_input("Max Followers (0=Unlimited)", min_value=0, value=0, step=1000, key="cfg_max_followers", disabled=inputs_disabled)
             with cfg_f3:
                 st.markdown("<div class='desktop-spacer'></div>", unsafe_allow_html=True)
-                include_private = st.checkbox("Include Private Profiles", value=True, disabled=inputs_disabled)
+                include_private = st.checkbox("Include Private Profiles", value=True, key="cfg_inc_private", disabled=inputs_disabled)
 
         with tab_cfg_neg:
             def on_add_neg_kw():
