@@ -7,13 +7,13 @@ SESSION_FILE = os.path.join(BASE_DIR, "session.json")
 EXPORTS_DIR = os.path.join(BASE_DIR, "exports")
 
 # Anti-Bot Rate Limiting & Delays (in seconds)
-MIN_DELAY_PER_PROFILE = 1.0
-MAX_DELAY_PER_PROFILE = 2.5
+MIN_DELAY_PER_PROFILE = 0.2
+MAX_DELAY_PER_PROFILE = 0.5
 
 # Batch Cool-down settings
-BATCH_SIZE = 50          # Accounts processed before cool-down
-COOL_DOWN_MIN_SEC = 5    # 5 seconds cool-down
-COOL_DOWN_MAX_SEC = 15   # 15 seconds cool-down
+BATCH_SIZE = 100         # Accounts processed before cool-down
+COOL_DOWN_MIN_SEC = 1    # 1 second cool-down
+COOL_DOWN_MAX_SEC = 3    # 3 seconds cool-down
 
 
 # Classification Thresholds (Fuzzy matching 0-100)

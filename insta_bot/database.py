@@ -406,9 +406,11 @@ def get_filtered_accounts(
     min_score: float = 0.0,
     search_query: str = "",
     has_contact_only: bool = False,
+    max_followers: int = 0,
+    privacy_filter: str = "ALL",
     search_id: Optional[int] = None
 ) -> List[Dict]:
-    """Get accounts list with category, match_score, text search, contact filtering, and search_id isolation."""
+    """Get accounts list with category, match_score, follower limit, privacy filter, text search, contact filtering, and search_id isolation."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -426,6 +428,15 @@ def get_filtered_accounts(
     if min_score > 0:
         query += " AND match_score >= ?"
         params.append(min_score)
+
+    if max_followers > 0:
+        query += " AND follower_count <= ?"
+        params.append(max_followers)
+
+    if privacy_filter == "PUBLIC":
+        query += " AND is_private = 0"
+    elif privacy_filter == "PRIVATE":
+        query += " AND is_private = 1"
 
     if has_contact_only:
         query += " AND (email != '' OR phone != '')"

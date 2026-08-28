@@ -831,16 +831,20 @@ st.markdown("---")
 # 5. FILTERS & EXPORT TOOLBAR
 # ---------------------------------------------------------
 st.markdown("##### Filter & Export Leads")
-f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([2, 1, 1, 0.9, 0.9, 0.9])
+f_col1, f_col2, f_col3, f_col4, f_col5, f_col6, f_col7 = st.columns([1.8, 0.9, 0.9, 0.9, 0.8, 0.8, 0.8])
 
 with f_col1:
     search_query = st.text_input("Search Filter", placeholder="Search username, bio, email, phone, or keyword...", label_visibility="collapsed")
 with f_col2:
-    min_match_score = st.number_input("Min Match Score (%)", min_value=0, max_value=100, value=0, step=5, label_visibility="collapsed")
+    min_match_score = st.number_input("Min Match %", min_value=0, max_value=100, value=0, step=5, label_visibility="collapsed")
 with f_col3:
-    category_filter_sel = st.selectbox("Category Filter", ["All Categories", "Qualified", "Needs Review", "Unqualified"], index=0, label_visibility="collapsed")
+    max_followers_filter = st.number_input("Max Followers (0=All)", min_value=0, value=0, step=500, label_visibility="collapsed")
 with f_col4:
-    has_contact_check = st.checkbox("With Email/Phone Only", value=False)
+    category_filter_sel = st.selectbox("Category Filter", ["All Categories", "Qualified", "Needs Review", "Unqualified"], index=0, label_visibility="collapsed")
+with f_col5:
+    privacy_filter_sel = st.selectbox("Profile Type", ["All Profiles", "Public Only", "Private Only"], index=0, label_visibility="collapsed")
+with f_col6:
+    has_contact_check = st.checkbox("With Contact Only", value=False)
 
 cat_db_param = None
 if category_filter_sel == "Qualified":
@@ -850,11 +854,19 @@ elif category_filter_sel == "Needs Review":
 elif category_filter_sel == "Unqualified":
     cat_db_param = "UNQUALIFIED"
 
+priv_db_param = "ALL"
+if privacy_filter_sel == "Public Only":
+    priv_db_param = "PUBLIC"
+elif privacy_filter_sel == "Private Only":
+    priv_db_param = "PRIVATE"
+
 filtered_accounts = get_filtered_accounts(
     category_filter=cat_db_param,
     min_score=float(min_match_score),
     search_query=search_query,
     has_contact_only=has_contact_check,
+    max_followers=int(max_followers_filter),
+    privacy_filter=priv_db_param,
     search_id=active_search_id
 )
 
@@ -864,22 +876,12 @@ if not df_export.empty:
     export_cols = [c for c in ["username", "full_name", "category", "match_score", "email", "phone", "matched_keywords", "follower_count", "following_count", "bio", "is_private", "reason"] if c in df_export.columns]
     df_export = df_export[export_cols]
 
-with f_col5:
+with f_col7:
     if not df_export.empty:
         csv_bytes = df_export.to_csv(index=False).encode('utf-8')
         st.download_button("Export CSV", data=csv_bytes, file_name="instagram_leads.csv", mime="text/csv", use_container_width=True)
     else:
         st.button("Export CSV", disabled=True, use_container_width=True)
-
-with f_col6:
-    if not df_export.empty:
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_export.to_excel(writer, index=False, sheet_name='Instagram Leads')
-        excel_bytes = buffer.getvalue()
-        st.download_button("Export Excel", data=excel_bytes, file_name="instagram_leads.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-    else:
-        st.button("Export Excel", disabled=True, use_container_width=True)
 
 st.markdown("---")
 
@@ -889,25 +891,42 @@ st.markdown("---")
 @st.dialog("Account Details")
 def show_account_details_dialog(acc):
     st.markdown(f"### @{acc['username']}")
-    st.write(f"**Full Name:** {acc['full_name'] or 'N/A'}")
     
     cat = acc['category']
     if cat == "QUALIFIED":
-        st.markdown("**Status:** <span class='badge badge-qualified'>QUALIFIED</span>", unsafe_allow_html=True)
+        badge_html = "<span class='badge badge-qualified'>QUALIFIED</span>"
     elif cat == "DOUBTFUL":
-        st.markdown("**Status:** <span class='badge badge-review'>NEEDS REVIEW</span>", unsafe_allow_html=True)
+        badge_html = "<span class='badge badge-review'>NEEDS REVIEW</span>"
     else:
-        st.markdown("**Status:** <span class='badge badge-unqualified'>UNQUALIFIED</span>", unsafe_allow_html=True)
+        badge_html = "<span class='badge badge-unqualified'>UNQUALIFIED</span>"
 
     score_val = acc.get('match_score', 0)
-    st.write(f"**Match Score:** {score_val:.0f}%")
-    st.write(f"**Extracted Email:** `{acc.get('email') or 'Not Extracted'}`")
-    st.write(f"**Extracted Phone:** `{acc.get('phone') or 'Not Extracted'}`")
-    st.write(f"**Matched Keywords:** {acc['matched_keywords'] or 'None'}")
-    st.write(f"**Bio:** {acc['bio'] or 'No bio text'}")
-    st.write(f"**Followers:** {acc['follower_count']:,} | **Following:** {acc['following_count']:,}")
-    st.write(f"**Account Type:** {'Private Profile' if acc['is_private'] else 'Public Profile'}")
-    st.write(f"**Reason:** {acc['reason']}")
+    st.markdown(f"**Full Name:** {acc['full_name'] or 'N/A'} &nbsp; | &nbsp; **Status:** {badge_html} &nbsp; | &nbsp; **Match Score:** `{score_val:.0f}%`", unsafe_allow_html=True)
+    st.markdown(f"**Followers:** `{acc['follower_count']:,}` &nbsp; | &nbsp; **Following:** `{acc['following_count']:,}` &nbsp; | &nbsp; **Type:** `{'Private Profile' if acc['is_private'] else 'Public Profile'}`")
+    
+    if acc.get("bio"):
+        st.markdown(f"**Bio:** {acc['bio']}")
+
+    if acc.get("matched_keywords"):
+        st.markdown(f"**Matched Keywords:** `{acc['matched_keywords']}`")
+
+    if acc.get("reason"):
+        st.markdown(f"**Reason:** {acc['reason']}")
+
+    # Contact Info Section (Available vs Unextracted)
+    email_val = acc.get('email')
+    phone_val = acc.get('phone')
+
+    st.markdown("<div style='border-bottom: 1px solid var(--border-subtle); margin: 12px 0;'></div>", unsafe_allow_html=True)
+
+    if email_val or phone_val:
+        st.markdown("**Extracted Contact Info:**")
+        if email_val:
+            st.success(f"Email: {email_val}")
+        if phone_val:
+            st.success(f"Phone: {phone_val}")
+    else:
+        st.caption("Contact Info (Email / Phone): Not Extracted for this profile")
     
     st.markdown("---")
     c_d1, c_d2, c_d3 = st.columns(3)
