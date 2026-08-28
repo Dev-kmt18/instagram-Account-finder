@@ -257,6 +257,62 @@ st.markdown("""
         border-color: var(--border-hover) !important;
         color: #FFFFFF !important;
     }
+
+    /* Desktop Spacer Helper */
+    .desktop-spacer {
+        margin-top: 28px;
+    }
+
+    /* Responsive Media Queries for Mobile Screens */
+    @media (max-width: 768px) {
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        .app-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+        }
+        .app-title {
+            font-size: 1.25rem !important;
+        }
+        .app-subtitle {
+            font-size: 0.78rem !important;
+        }
+        .stat-bar {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 12px 10px !important;
+            padding: 12px 14px !important;
+        }
+        .stat-item {
+            border-right: none !important;
+            border-bottom: 1px solid var(--border-subtle) !important;
+            padding-bottom: 8px !important;
+            padding-right: 0 !important;
+        }
+        .stat-item:nth-last-child(-n+2) {
+            border-bottom: none !important;
+        }
+        .stat-num {
+            font-size: 1.25rem !important;
+        }
+        .desktop-spacer {
+            margin-top: 0px !important;
+        }
+        div[data-testid="stHorizontalBlock"] {
+            gap: 0.5rem !important;
+        }
+        .stButton button {
+            width: 100% !important;
+        }
+        .badge {
+            font-size: 0.7rem !important;
+            padding: 2px 8px !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -455,7 +511,7 @@ else:
     with hero_c2:
         search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, disabled=inputs_disabled)
     with hero_c3:
-        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='desktop-spacer'></div>", unsafe_allow_html=True)
         pending_queue_count = get_pending_queue_count()
         if not st.session_state.is_running:
             if st.button("▶️ Start Search", use_container_width=True, type="primary"):
@@ -597,7 +653,7 @@ else:
             with cfg_f2:
                 max_followers = st.number_input("Max Followers (0=Unlimited)", min_value=0, value=0, step=1000, disabled=inputs_disabled)
             with cfg_f3:
-                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div class='desktop-spacer'></div>", unsafe_allow_html=True)
                 include_private = st.checkbox("Include Private Profiles", value=True, disabled=inputs_disabled)
 
         with tab_cfg_neg:
