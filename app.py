@@ -575,24 +575,33 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    hero_c1, hero_c2, hero_c3 = st.columns([2.5, 1.5, 1.5])
+    hero_c1, hero_c2, hero_c3, hero_c4 = st.columns([1.8, 2.4, 1.2, 1.3])
     
     with hero_c1:
-        target_username = st.text_input("Target Account Username", placeholder="e.g. instagram_username", disabled=inputs_disabled)
+        target_username = st.text_input("Target Account Username", placeholder="e.g. instagram_username", key="target_user_field", disabled=inputs_disabled)
     with hero_c2:
-        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, disabled=inputs_disabled)
+        typed_kw_input = st.text_input(
+            "Target Keywords (comma-separated)",
+            value=", ".join(st.session_state.kw_list) if st.session_state.kw_list else "",
+            placeholder="Type target keywords (e.g. mbbs, kolkata, doctor)...",
+            key="kw_input_field",
+            disabled=inputs_disabled
+        )
     with hero_c3:
+        search_mode = st.selectbox("Search Mode", ["followers", "following", "both"], index=0, disabled=inputs_disabled)
+    with hero_c4:
         st.markdown("<div class='desktop-spacer'></div>", unsafe_allow_html=True)
         pending_queue_count = get_pending_queue_count()
         if not st.session_state.is_running:
             if st.button("Start Search", use_container_width=True, type="primary"):
                 final_kws = []
-                typed_kw = st.session_state.get("kw_input_field", "").strip()
-                if typed_kw:
-                    for k in typed_kw.split(","):
+                if typed_kw_input:
+                    for k in typed_kw_input.split(","):
                         clean_k = k.strip().lower()
                         if clean_k and clean_k not in final_kws:
                             final_kws.append(clean_k)
+                elif st.session_state.kw_list:
+                    final_kws = list(st.session_state.kw_list)
 
                 final_neg_kws = []
                 typed_neg_kw = st.session_state.get("neg_kw_input_field", "").strip()
@@ -606,7 +615,7 @@ else:
                 if not target_username and pending_queue_count == 0:
                     st.error("Please enter Target Username!")
                 elif not final_kws:
-                    st.error("Please add at least 1 keyword!")
+                    st.error("Please enter Target Keywords!")
                 else:
                     if not st.session_state.engine:
                         sid_saved = st.session_state.get("saved_sessionid", "")
@@ -675,23 +684,12 @@ else:
                 st.button("●", use_container_width=True, disabled=True, help="Search Crawl Active")
 
     # ADVANCED CONFIGURATION AREA (COLLAPSIBLE TABS)
-    with st.expander("Advanced Settings & Keyword Filters", expanded=True):
-        tab_cfg_kws, tab_cfg_limits, tab_cfg_filters, tab_cfg_neg = st.tabs([
-            "Target Keywords",
+    with st.expander("Advanced Settings & Limits", expanded=True):
+        tab_cfg_limits, tab_cfg_filters, tab_cfg_neg = st.tabs([
             "Limits & Depth",
             "Quality Filters",
             "Blacklist Keywords"
         ])
-
-        with tab_cfg_kws:
-            st.text_input(
-                "Target Keywords (comma-separated)",
-                value=", ".join(st.session_state.kw_list) if st.session_state.kw_list else "",
-                placeholder="Type target keywords separated by commas (e.g. mbbs, kolkata, doctor)...",
-                key="kw_input_field",
-                disabled=inputs_disabled,
-                help="Type target keywords directly in this box separated by commas. All words inside this box will be matched!"
-            )
 
         with tab_cfg_limits:
             cfg_l1, cfg_l2, cfg_l3, cfg_l4 = st.columns(4)
