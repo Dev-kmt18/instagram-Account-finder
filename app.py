@@ -119,7 +119,7 @@ st.markdown("""
     .badge {
         display: inline-flex;
         align-items: center;
-        padding: 3px 8px;
+        padding: 3px 9px;
         border-radius: 4px;
         font-size: 0.72rem;
         font-weight: 700;
@@ -127,19 +127,19 @@ st.markdown("""
         text-transform: uppercase;
     }
     .badge-qualified {
-        background-color: rgba(16, 185, 129, 0.12);
-        color: #34D399;
-        border: 1px solid rgba(16, 185, 129, 0.3);
+        background-color: #064E3B !important;
+        color: #6EE7B7 !important;
+        border: 1px solid #047857 !important;
     }
     .badge-review {
-        background-color: rgba(245, 158, 11, 0.12);
-        color: #FBBF24;
-        border: 1px solid rgba(245, 158, 11, 0.3);
+        background-color: #78350F !important;
+        color: #FDE68A !important;
+        border: 1px solid #B45309 !important;
     }
     .badge-unqualified {
-        background-color: rgba(239, 68, 68, 0.12);
-        color: #FCA5A5;
-        border: 1px solid rgba(239, 68, 68, 0.3);
+        background-color: #1F2937 !important;
+        color: #9CA3AF !important;
+        border: 1px solid #374151 !important;
     }
     .badge-contact {
         background-color: rgba(139, 0, 0, 0.18);
@@ -391,8 +391,7 @@ if not st.session_state.is_authenticated:
                                 st.success(f"Connected successfully as @{st.session_state.auth_user}!")
                                 st.rerun()
                             else:
-                                last_err = eng.logs[-1] if eng.logs else "Invalid or expired Session ID cookie"
-                                st.error(f"Authentication Failed: {last_err}")
+                                st.error("Authentication failed. The Session ID cookie is invalid, expired, or rejected by Instagram. Please check your sessionid cookie and try again.")
                     else:
                         st.error("Please enter a valid sessionid cookie value.")
             
@@ -430,8 +429,7 @@ if not st.session_state.is_authenticated:
                                     st.success(f"Connected as @{st.session_state.auth_user}!")
                                     st.rerun()
                                 else:
-                                    last_err = eng.logs[-1] if eng.logs else "Login failed"
-                                    st.error(f"Authentication Failed: {last_err}")
+                                    st.error("Authentication failed. Please verify your Instagram username and password or use Session ID login.")
                         else:
                             st.error("Please enter both username and password.")
             else:
@@ -1004,11 +1002,13 @@ with tab_unqual:
     render_account_list(unqual_accs, tab_key="unqual")
 
 with tab_logs:
-    st.markdown("##### Live Activity Logs")
+    st.markdown("##### System Activity Status")
     if st.session_state.engine and st.session_state.engine.logs:
-        st.code("\n".join(st.session_state.engine.logs[-200:]), language="text")
+        st.success("Agent process is active. Processing candidate profiles in real-time.")
+        with st.expander("Developer Debug Logs", expanded=False):
+            st.code("\n".join(st.session_state.engine.logs[-200:]), language="text")
     else:
-        st.info("Agent is idle. Start search to view activity logs.")
+        st.info("System is idle. Start a search session to begin scanning.")
 
 # Sync state
 if st.session_state.engine:
