@@ -415,6 +415,19 @@ if not st.session_state.is_authenticated:
                                 st.error(f"Authentication Failed: {last_err}")
                     else:
                         st.error("Please enter a valid sessionid cookie.")
+            
+            with st.expander("❓ How to get Session ID on Mobile / PC"):
+                st.markdown("""
+                **💡 Easiest Option for Mobile Users:**  
+                Select **"OTP / Login"** above to log in directly with your Instagram Username & Password (and 6-digit OTP code if 2FA is enabled). No cookie copy-pasting required!
+
+                ---
+
+                **📱 Mobile Browser Method (Chrome / Kiwi / Safari):**
+                1. Open Chrome/Safari on your phone and log into `https://www.instagram.com`.
+                2. Click the **Lock Icon 🔒** next to the website address bar -> **Cookies & Site Data** -> **Cookies** -> Select `sessionid` -> Copy value!
+                3. Or copy your `sessionid` cookie from PC Chrome (`F12` -> `Application` -> `Cookies`) and send it to your phone via WhatsApp/Notes!
+                """)
         else:
             if not st.session_state.awaiting_otp:
                 c_u1, c_u2, c_u3 = st.columns([1.5, 1.5, 1])
