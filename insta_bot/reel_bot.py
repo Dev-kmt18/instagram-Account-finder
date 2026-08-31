@@ -154,7 +154,80 @@ class ReelAutomationEngine:
             self.log(f"⚠️ Resolution note for @{clean_username}: {e}")
         return None
 
+    def discover_random_reels_from_feed(self, count: int = 5, headless: bool = True) -> List[str]:
+        """
+        Automatically scroll Instagram Reels Feed using Playwright and discover random fresh Reel URLs.
+        """
+        clean_sid = urllib.parse.unquote(self.sessionid.strip().strip('"').strip("'"))
+        ds_user_id = clean_sid.split("%3A")[0] if "%3A" in clean_sid else clean_sid.split(":")[0]
+
+        if not clean_sid or len(clean_sid) < 5:
+            self.log("❌ Cannot discover Reels: Session ID is empty or invalid.")
+            return []
+
+        discovered_reels = set()
+        self.log(f"🎬 Scrolling Instagram Reels feed via Playwright to discover {count} random Reels...")
+
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=headless,
+                    args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+                )
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800}
+                )
+                context.add_cookies([
+                    {"name": "sessionid", "value": clean_sid, "domain": ".instagram.com", "path": "/"},
+                    {"name": "ds_user_id", "value": ds_user_id, "domain": ".instagram.com", "path": "/"}
+                ])
+                page = context.new_page()
+                page.goto("https://www.instagram.com/reels/", timeout=35000, wait_until="domcontentloaded")
+                time.sleep(3)
+
+                for p_text in ["Not Now", "not now", "Save Info"]:
+                    try:
+                        b = page.locator(f"button:has-text('{p_text}')").first
+                        if b.is_visible(timeout=1500):
+                            b.click()
+                            time.sleep(1)
+                    except Exception:
+                        pass
+
+                max_scrolls = max(count * 2, 8)
+                for _ in range(max_scrolls):
+                    curr_u = page.url
+                    if "/reel/" in curr_u or "/p/" in curr_u or "/reels/" in curr_u:
+                        discovered_reels.add(curr_u)
+
+                    for a in page.locator("a[href*='/reel/'], a[href*='/p/']").all():
+                        try:
+                            href = a.get_attribute("href")
+                            if href:
+                                full_link = "https://www.instagram.com" + href if href.startswith("/") else href
+                                discovered_reels.add(full_link.split("?")[0])
+                        except Exception:
+                            pass
+
+                    if len(discovered_reels) >= count:
+                        break
+
+                    page.keyboard.press("ArrowDown")
+                    time.sleep(2)
+
+                browser.close()
+
+        except Exception as err:
+            self.log(f"⚠️ Error discovering feed Reels: {err}")
+
+        result_list = list(discovered_reels)
+        self.log(f"🎉 Discovered {len(result_list)} random Reels from Instagram feed.")
+        return result_list
+
     def send_direct_reel(self, recipient_username: str, reel_url: str, use_playwright: bool = True, headless: bool = True, force_resend: bool = False) -> bool:
+
         """
         Send a Reel link via Instagram Direct Message.
         Prevents sending duplicate Reels to the same user.
@@ -422,9 +495,10 @@ class ReelAutomationEngine:
         reel_urls: List[str],
         total_reels: int,
         start_time_str: str, # e.g. "21:00"
-        end_time_str: str   # e.g. "23:00"
+        end_time_str: str,   # e.g. "23:00"
+        auto_discover: bool = False
     ):
-        """Start automation thread with randomized timing window."""
+        """Start automation thread with randomized timing window and optional auto Reels feed discovery."""
         if self.is_running:
             self.log("⚠️ Automation is already running!")
             return
@@ -434,12 +508,25 @@ class ReelAutomationEngine:
         self.status = "RUNNING"
         self.sent_count = 0
         self.failed_count = 0
-        self.total_reels = min(total_reels, len(reel_urls)) if reel_urls else total_reels
+        self.total_reels = total_reels
 
         def run_loop():
             self.log(f"🚀 Starting Reel Automation Engine...")
             self.log(f"🎯 Target Recipients: {', '.join(recipients)}")
+            
+            nonlocal reel_urls
+            if auto_discover or not reel_urls:
+                self.log("🎲 Auto Discover Feed Mode enabled! Scrolling Instagram Reels feed for fresh random Reels...")
+                discovered = self.discover_random_reels_from_feed(count=self.total_reels)
+                if discovered:
+                    reel_urls = discovered
+                    self.total_reels = len(reel_urls)
+                else:
+                    self.log("⚠️ No Reels discovered from feed. Falling back to default URL list.")
+
+            self.total_reels = min(self.total_reels, len(reel_urls)) if reel_urls else self.total_reels
             self.log(f"⏱ Schedule Window: {start_time_str} to {end_time_str} ({self.total_reels} Reels)")
+
 
             # Parse start and end time objects for today (12h AM/PM or 24h)
             now = datetime.datetime.now()

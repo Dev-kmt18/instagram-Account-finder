@@ -1172,7 +1172,8 @@ def render_reel_automation_tab():
             end_time_val = f"{end_time_raw.strip()} {end_ampm.strip()}"
 
 
-        reel_urls_in = st.text_area("Reel URLs (one per line)", value="", placeholder="Paste Instagram Reel links to share, one link per line...", height=100, key="reel_urls_input", help="Paste Instagram Reel links to share, one link per line.")
+        auto_discover_cb = st.checkbox("🎲 Auto-Discover & Send Random Reels from Instagram Feed (No URLs needed)", value=False, key="auto_discover_cb", help="Playwright will automatically scroll your Instagram Reels feed, discover fresh Reels, and send them to the recipient!")
+        reel_urls_in = st.text_area("Reel URLs (one per line)", value="", placeholder="Paste Instagram Reel links to share, OR check Auto-Discover box above...", height=90, key="reel_urls_input", help="Paste Instagram Reel links to share, one link per line.")
 
     st.markdown("---")
     c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns([1.4, 1.4, 1, 1, 1])
@@ -1187,8 +1188,8 @@ def render_reel_automation_tab():
                     st.error("Please enter a valid Instagram Session ID!")
                 elif not reel_target_in.strip():
                     st.error("Please enter recipient username!")
-                elif not reel_urls_in.strip():
-                    st.error("Please enter at least 1 Reel URL!")
+                elif not reel_urls_in.strip() and not auto_discover_cb:
+                    st.error("Please enter at least 1 Reel URL OR check 'Auto-Discover'!")
                 else:
                     with st.spinner("Confirming Session ID with Instagram..."):
                         is_valid, v_user, msg = reel_eng.verify_sessionid(reel_sid_in.strip())
@@ -1205,10 +1206,12 @@ def render_reel_automation_tab():
                             reel_urls=urls,
                             total_reels=int(total_reels_count),
                             start_time_str=start_time_val.strip(),
-                            end_time_str=end_time_val.strip()
+                            end_time_str=end_time_val.strip(),
+                            auto_discover=auto_discover_cb
                         )
                         st.success(f"🟢 Verified Session ID for @{v_user or 'User'}! Reel Automation Started for @{', @'.join(targets)}")
                         st.rerun()
+
         else:
             st.button("Automation Running...", disabled=True, use_container_width=True, key="btn_running_reel_auto")
 
