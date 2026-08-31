@@ -159,19 +159,54 @@ st.markdown("""
         text-transform: uppercase;
     }
     .badge-qualified {
-        background-color: #064E3B !important;
-        color: #6EE7B7 !important;
-        border: 1px solid #047857 !important;
+        background-color: rgba(16, 185, 129, 0.15) !important;
+        color: #10B981 !important;
+        border: 1px solid rgba(16, 185, 129, 0.3) !important;
     }
-    .badge-review {
-        background-color: #78350F !important;
-        color: #FDE68A !important;
-        border: 1px solid #B45309 !important;
+    .badge-doubtful {
+        background-color: rgba(245, 158, 11, 0.15) !important;
+        color: #F59E0B !important;
+        border: 1px solid rgba(245, 158, 11, 0.3) !important;
     }
     .badge-unqualified {
-        background-color: #1F2937 !important;
-        color: #9CA3AF !important;
-        border: 1px solid #374151 !important;
+        background-color: rgba(239, 68, 68, 0.15) !important;
+        color: #EF4444 !important;
+        border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    }
+
+    /* Complete Mobile Responsiveness & Layout Adaptability */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            padding-top: 1rem !important;
+        }
+        [data-testid="column"], div[data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+            margin-bottom: 0.5rem !important;
+        }
+        .stButton button {
+            width: 100% !important;
+            margin-bottom: 0.4rem !important;
+        }
+        .stMetric {
+            background: var(--bg-surface) !important;
+            padding: 10px !important;
+            border-radius: 8px !important;
+            border: 1px solid var(--border-subtle) !important;
+            margin-bottom: 0.5rem !important;
+        }
+        .hero-card {
+            padding: 12px !important;
+        }
+        .app-title {
+            font-size: 1.2rem !important;
+        }
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+        }
     }
 
     /* Simple Glowing Pulse Dot Indicator */
@@ -1106,7 +1141,7 @@ def render_reel_automation_tab():
             🤖 Reel Share Automation Engine
         </div>
         <div style="color: #94A3B8; font-size: 0.82rem; margin-top: 4px;">
-            Automatically send Instagram Reels to selected friends with human-like randomized delays during your scheduled time window (e.g. 9:00 PM to 11:00 PM).
+            Automatically send Instagram Reels to selected friends with human-like randomized delays during your scheduled time window (e.g. 09:00 PM to 11:00 PM).
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -1117,21 +1152,18 @@ def render_reel_automation_tab():
         st.markdown("##### 🔑 Session Credentials & Recipient Settings")
         saved_sid = st.session_state.get("saved_sessionid", "")
         
-        c_sid_field, c_sid_verify_btn = st.columns([2.6, 1.4])
-        with c_sid_field:
-            reel_sid_in = st.text_input("Instagram Session ID Cookie", value=saved_sid, type="password", placeholder="Paste Instagram sessionid cookie...", key="reel_sid_input", help="Authenticated Session ID cookie from Instagram.")
-        with c_sid_verify_btn:
-            st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-            if st.button("🔍 Verify Session", use_container_width=True, key="btn_verify_sid_tab2"):
-                if reel_sid_in.strip():
-                    with st.spinner("Verifying Session ID with Instagram..."):
-                        is_valid, v_user, msg = st.session_state.reel_engine.verify_sessionid(reel_sid_in.strip())
-                        if is_valid:
-                            st.session_state.sid_verified_status = (True, v_user, msg)
-                        else:
-                            st.session_state.sid_verified_status = (False, "", msg)
-                else:
-                    st.error("Please enter a Session ID first.")
+        reel_sid_in = st.text_input("Instagram Session ID Cookie", value=saved_sid, type="password", placeholder="Paste Instagram sessionid cookie...", key="reel_sid_input", help="Authenticated Session ID cookie from Instagram.")
+        
+        if st.button("🔍 Verify Session ID", use_container_width=True, key="btn_verify_sid_tab2"):
+            if reel_sid_in.strip():
+                with st.spinner("Verifying Session ID with Instagram..."):
+                    is_valid, v_user, msg = st.session_state.reel_engine.verify_sessionid(reel_sid_in.strip())
+                    if is_valid:
+                        st.session_state.sid_verified_status = (True, v_user, msg)
+                    else:
+                        st.session_state.sid_verified_status = (False, "", msg)
+            else:
+                st.error("Please enter a Session ID first.")
 
         if "sid_verified_status" in st.session_state and st.session_state.sid_verified_status:
             v_ok, v_user, v_msg = st.session_state.sid_verified_status
@@ -1150,30 +1182,46 @@ def render_reel_automation_tab():
         total_reels_count = st.number_input("Total Reels to Send", min_value=1, max_value=500, value=15, step=1, key="reel_count_input")
 
     with r_col2:
-        st.markdown("##### ⏱ Time Window Picker (Type Time & Select AM/PM)")
+        st.markdown("##### ⏱ 12-Hour Schedule Window")
         
         t_col1, t_col2 = st.columns(2)
         with t_col1:
             st.markdown("<div style='font-size:0.75rem; font-weight:700; color:#94A3B8; margin-bottom:4px;'>START TIME</div>", unsafe_allow_html=True)
-            st_text_in, st_ampm_in = st.columns([2, 1.2])
-            with st_text_in:
-                start_time_raw = st.text_input("Start Time (HH:MM)", value="09:00", placeholder="e.g. 09:00", key="start_time_text_input")
-            with st_ampm_in:
-                start_ampm = st.selectbox("Format", ["PM", "AM"], index=0, key="start_ampm_sel")
-            start_time_val = f"{start_time_raw.strip()} {start_ampm.strip()}"
+            st_h, st_m, st_ap = st.columns([1, 1, 1.2])
+            with st_h:
+                sh_val = st.text_input("Hour", value="09", placeholder="09", key="start_hour_in")
+            with st_m:
+                sm_val = st.text_input("Min", value="00", placeholder="00", key="start_min_in")
+            with st_ap:
+                sap_val = st.selectbox("AM/PM", ["PM", "AM"], index=0, key="start_ampm_in")
+            start_time_val = f"{sh_val.strip()}:{sm_val.strip()} {sap_val.strip()}"
 
         with t_col2:
             st.markdown("<div style='font-size:0.75rem; font-weight:700; color:#94A3B8; margin-bottom:4px;'>END TIME</div>", unsafe_allow_html=True)
-            et_text_in, et_ampm_in = st.columns([2, 1.2])
-            with et_text_in:
-                end_time_raw = st.text_input("End Time (HH:MM)", value="11:00", placeholder="e.g. 11:00", key="end_time_text_input")
-            with et_ampm_in:
-                end_ampm = st.selectbox("Format", ["PM", "AM"], index=0, key="end_ampm_sel")
-            end_time_val = f"{end_time_raw.strip()} {end_ampm.strip()}"
+            et_h, et_m, et_ap = st.columns([1, 1, 1.2])
+            with et_h:
+                eh_val = st.text_input("Hour", value="11", placeholder="11", key="end_hour_in")
+            with et_m:
+                em_val = st.text_input("Min", value="00", placeholder="00", key="end_min_in")
+            with et_ap:
+                eap_val = st.selectbox("AM/PM", ["PM", "AM"], index=0, key="end_ampm_in")
+            end_time_val = f"{eh_val.strip()}:{em_val.strip()} {eap_val.strip()}"
 
+        st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+        reel_source_mode = st.radio(
+            "Reel Source Mode",
+            ["🔗 Custom Reel Links", "🎲 Auto-Discover Random Reels from Feed"],
+            horizontal=True,
+            key="reel_source_mode_radio"
+        )
 
-        auto_discover_cb = st.checkbox("🎲 Auto-Discover & Send Random Reels from Instagram Feed (No URLs needed)", value=False, key="auto_discover_cb", help="Playwright will automatically scroll your Instagram Reels feed, discover fresh Reels, and send them to the recipient!")
-        reel_urls_in = st.text_area("Reel URLs (one per line)", value="", placeholder="Paste Instagram Reel links to share, OR check Auto-Discover box above...", height=90, key="reel_urls_input", help="Paste Instagram Reel links to share, one link per line.")
+        if reel_source_mode == "🔗 Custom Reel Links":
+            reel_urls_in = st.text_area("Reel URLs (one per line)", value="", placeholder="Paste Instagram Reel links to share, one link per line...", height=85, key="reel_urls_input")
+            auto_discover_cb = False
+        else:
+            st.info("🤖 **Auto-Discover Active**: Playwright browser will automatically scroll your Instagram feed, discover fresh Reels, and send them to your recipient!")
+            reel_urls_in = ""
+            auto_discover_cb = True
 
     st.markdown("---")
     c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns([1.4, 1.4, 1, 1, 1])
@@ -1189,7 +1237,7 @@ def render_reel_automation_tab():
                 elif not reel_target_in.strip():
                     st.error("Please enter recipient username!")
                 elif not reel_urls_in.strip() and not auto_discover_cb:
-                    st.error("Please enter at least 1 Reel URL OR check 'Auto-Discover'!")
+                    st.error("Please enter at least 1 Reel URL OR choose 'Auto-Discover'!")
                 else:
                     with st.spinner("Confirming Session ID with Instagram..."):
                         is_valid, v_user, msg = reel_eng.verify_sessionid(reel_sid_in.strip())
@@ -1221,8 +1269,8 @@ def render_reel_automation_tab():
                 st.error("Please enter a valid Instagram Session ID!")
             elif not reel_target_in.strip():
                 st.error("Please enter recipient username!")
-            elif not reel_urls_in.strip():
-                st.error("Please enter at least 1 Reel URL!")
+            elif not reel_urls_in.strip() and not auto_discover_cb:
+                st.error("Please enter at least 1 Reel URL OR choose 'Auto-Discover'!")
             else:
                 with st.spinner("Confirming Session ID with Instagram..."):
                     is_valid, v_user, msg = reel_eng.verify_sessionid(reel_sid_in.strip())
@@ -1234,7 +1282,7 @@ def render_reel_automation_tab():
                     task_id = add_scheduled_task(
                         sessionid=reel_sid_in.strip(),
                         recipients=reel_target_in.strip(),
-                        reel_urls=reel_urls_in.strip(),
+                        reel_urls=reel_urls_in.strip() if reel_urls_in.strip() else "AUTO_DISCOVER",
                         total_reels=int(total_reels_count),
                         start_time=start_time_val.strip(),
                         end_time=end_time_val.strip()
@@ -1242,6 +1290,7 @@ def render_reel_automation_tab():
                     daemon.start_daemon()
                     st.success(f"🟢 Verified Session ID for @{v_user or 'User'}! Task #{task_id} saved to Background Daemon.")
                     st.rerun()
+
 
     with c_btn3:
         if reel_eng.is_running:
