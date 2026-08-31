@@ -226,10 +226,9 @@ class ReelAutomationEngine:
         self.log(f"🎉 Discovered {len(result_list)} random Reels from Instagram feed.")
         return result_list
 
-    def send_direct_reel(self, recipient_username: str, reel_url: str, use_playwright: bool = True, headless: bool = True, force_resend: bool = False) -> bool:
-
+    def send_direct_reel(self, recipient_username: str, reel_url: str, use_playwright: bool = True, headless: bool = True, force_resend: bool = False, max_retries: int = 2) -> bool:
         """
-        Send a Reel link via Instagram Direct Message.
+        Send a Reel link via Instagram Direct Message with automatic retry on failure.
         Prevents sending duplicate Reels to the same user.
         Uses Playwright real browser automation by default.
         """
@@ -239,14 +238,28 @@ class ReelAutomationEngine:
             add_reel_log(recipient_username, reel_url, "SKIPPED", msg)
             return False
 
-        if use_playwright:
-            try:
-                return self.send_direct_reel_playwright(recipient_username, reel_url, headless=headless)
-            except Exception as err:
-                self.log(f"⚠️ Playwright engine error: {err}. Falling back to HTTP API...")
-                return self._send_direct_reel_http(recipient_username, reel_url)
-        else:
-            return self._send_direct_reel_http(recipient_username, reel_url)
+        for attempt in range(1, max_retries + 1):
+            if attempt > 1:
+                self.log(f"🔄 Retry Attempt {attempt}/{max_retries} for sending Reel to @{recipient_username}...")
+                time.sleep(3)
+
+            success = False
+            if use_playwright:
+                try:
+                    success = self.send_direct_reel_playwright(recipient_username, reel_url, headless=headless)
+                except Exception as err:
+                    self.log(f"⚠️ Playwright engine error (Attempt {attempt}): {err}. Falling back to HTTP API...")
+                    success = self._send_direct_reel_http(recipient_username, reel_url)
+            else:
+                success = self._send_direct_reel_http(recipient_username, reel_url)
+
+            if success:
+                return True
+            else:
+                self.log(f"❌ Send failed on attempt {attempt}/{max_retries}.")
+
+        return False
+
 
 
     def send_direct_reel_playwright(self, recipient_username: str, reel_url: str, headless: bool = True) -> bool:
