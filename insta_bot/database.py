@@ -99,6 +99,34 @@ def init_db():
             )
         """)
 
+        # Reel Automation logs table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reel_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER DEFAULT 0,
+                recipient TEXT,
+                reel_url TEXT,
+                status TEXT, -- SENT, FAILED, SCHEDULED
+                message TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Scheduled Reel Tasks table for background daemon execution
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_reel_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sessionid TEXT,
+                recipients TEXT,
+                reel_urls TEXT,
+                total_reels INTEGER DEFAULT 15,
+                start_time TEXT, -- e.g. "21:00"
+                end_time TEXT,   -- e.g. "23:00"
+                status TEXT DEFAULT 'SCHEDULED', -- SCHEDULED, RUNNING, COMPLETED, CANCELLED, FAILED
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
         conn.close()
 
@@ -468,3 +496,139 @@ def clear_database():
         cursor.execute("DELETE FROM search_history")
         conn.commit()
         conn.close()
+
+def add_reel_log(recipient: str, reel_url: str, status: str, message: str, task_id: int = 0):
+    """Save a reel sending log entry to SQLite."""
+    with _db_lock:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO reel_logs (task_id, recipient, reel_url, status, message)
+            VALUES (?, ?, ?, ?, ?)
+        """, (task_id, str(recipient), str(reel_url), str(status), str(message)))
+        conn.commit()
+        conn.close()
+
+def get_reel_logs(limit: int = 100) -> List[Dict]:
+    """Retrieve recent reel automation logs."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM reel_logs ORDER BY id DESC LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def clear_reel_logs():
+    """Clear all reel automation logs."""
+    with _db_lock:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM reel_logs")
+        conn.commit()
+        conn.close()
+
+def is_reel_already_sent(recipient: str, reel_url: str) -> bool:
+    """Check if a Reel URL was already successfully sent to a recipient."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    clean_recip = str(recipient).strip().lstrip("@")
+    clean_url = str(reel_url).strip()
+    # Normalize URL path for accurate matching (e.g. /p/abc/ or /reel/abc/)
+    short_code = ""
+    for part in clean_url.split("/"):
+        if len(part) >= 8 and not part.startswith("http") and not "instagram" in part:
+            short_code = part.split("?")[0]
+            break
+
+    if short_code:
+        cursor.execute("""
+            SELECT COUNT(*) FROM reel_logs 
+            WHERE LOWER(recipient) = LOWER(?) AND status = 'SENT' AND (reel_url LIKE ? OR reel_url = ?)
+        """, (clean_recip, f"%{short_code}%", clean_url))
+    else:
+        cursor.execute("""
+            SELECT COUNT(*) FROM reel_logs 
+            WHERE LOWER(recipient) = LOWER(?) AND status = 'SENT' AND reel_url = ?
+        """, (clean_recip, clean_url))
+    
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count > 0
+
+
+def add_scheduled_task(
+    sessionid: str,
+    recipients: str,
+    reel_urls: str,
+    total_reels: int,
+    start_time: str,
+    end_time: str
+) -> int:
+    """Save a background reel automation schedule."""
+    with _db_lock:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO scheduled_reel_tasks (sessionid, recipients, reel_urls, total_reels, start_time, end_time, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'SCHEDULED')
+        """, (sessionid, recipients, reel_urls, total_reels, start_time, end_time))
+        task_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return task_id
+
+def get_pending_scheduled_tasks() -> List[Dict]:
+    """Retrieve all SCHEDULED tasks awaiting background execution."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM scheduled_reel_tasks WHERE status = 'SCHEDULED' ORDER BY id ASC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def update_scheduled_task_status(task_id: int, status: str):
+    """Update scheduled task status (SCHEDULED, RUNNING, COMPLETED, CANCELLED, FAILED)."""
+    with _db_lock:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE scheduled_reel_tasks SET status = ? WHERE id = ?
+        """, (status, task_id))
+        conn.commit()
+        conn.close()
+
+def get_all_scheduled_tasks() -> List[Dict]:
+    """Retrieve all background scheduled tasks."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM scheduled_reel_tasks ORDER BY id DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def delete_scheduled_task(task_id: int):
+    """Delete a scheduled task entry."""
+    with _db_lock:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM scheduled_reel_tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        conn.close()
+
+def clear_scheduled_tasks():
+    """Clear all scheduled tasks."""
+    with _db_lock:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM scheduled_reel_tasks")
+        conn.commit()
+        conn.close()
+
+
+

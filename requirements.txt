@@ -4,3 +4,4 @@ streamlit-autorefresh
 pandas
 openpyxl
 rapidfuzz
+playwright
