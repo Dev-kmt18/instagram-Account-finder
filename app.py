@@ -209,6 +209,27 @@ st.markdown("""
         }
     }
 
+    /* Mobile & Touch Screen Tooltip Icon (?) Fix */
+    [data-testid="stTooltipIcon"] {
+        cursor: pointer !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 2px 4px !important;
+    }
+    div[data-baseweb="tooltip"], div[role="tooltip"], .stTooltipContent {
+        z-index: 999999 !important;
+        max-width: 90vw !important;
+        background-color: #0D0E12 !important;
+        color: #E2E8F0 !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 6px !important;
+        padding: 8px 12px !important;
+        font-size: 0.8rem !important;
+        word-break: break-word !important;
+    }
+
+
     /* Simple Glowing Pulse Dot Indicator */
     @keyframes simplePulse {
         0% { transform: scale(0.85); opacity: 0.7; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
@@ -1170,19 +1191,51 @@ def render_reel_automation_tab():
             v_ok, v_user, v_msg = st.session_state.sid_verified_status
             if v_ok:
                 st.markdown(f"""
-                <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 10px 14px; margin-top: 6px; margin-bottom: 10px;">
-                    <span style="color: #10B981; font-weight: 700; font-size: 0.85rem;">AUTHENTICATED INSTAGRAM USER:</span>
-                    <span style="color: #F8FAFC; font-weight: 700; font-size: 0.95rem; margin-left: 6px;">@{v_user or 'Verified User'}</span>
-                    <div style="color: #6EE7B7; font-size: 0.78rem; margin-top: 2px;">{v_msg}</div>
+                <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 8px 12px; margin-top: 6px; margin-bottom: 10px; width: 100%; box-sizing: border-box; word-break: break-word; overflow-wrap: anywhere;">
+                    <span style="color: #10B981; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;">AUTHENTICATED INSTAGRAM USER:</span>
+                    <span style="color: #F8FAFC; font-weight: 700; font-size: 0.88rem; margin-left: 4px;">@{v_user or 'Verified User'}</span>
+                    <div style="color: #6EE7B7; font-size: 0.76rem; margin-top: 2px;">{v_msg}</div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.error(f"Session Error: {v_msg}")
 
-        reel_target_in = st.text_input("Target Recipient Username(s)", value="", placeholder="e.g. username1, username2", key="reel_target_input", help="Target username(s) separated by commas")
+        reel_target_in = st.text_input("Target Recipient Username(s)", value="", placeholder="e.g. @username1, @username2", key="reel_target_input", help="Target Instagram handle(s) starting with @ separated by commas.")
+        st.markdown("<div style='font-size:0.72rem; color:#64748B; margin-top:-8px; margin-bottom:6px;'>Format: Every recipient handle must start with @ (e.g. @pawan_kmt18, @its_devkinandan_108)</div>", unsafe_allow_html=True)
+
+        valid_recipients = []
+        recipient_has_error = False
+
         if reel_target_in.strip():
-            confirmed_recips = [t.strip().lstrip("@") for t in reel_target_in.split(",") if t.strip()]
-            st.markdown(f"<div style='font-size:0.78rem; color:#10B981; margin-top:-6px; margin-bottom:8px;'>Confirmed Recipient(s): @{', @'.join(confirmed_recips)}</div>", unsafe_allow_html=True)
+            raw_recips = [t.strip() for t in reel_target_in.split(",") if t.strip()]
+            invalid_no_at = []
+            invalid_chars = []
+            import re
+
+            for item in raw_recips:
+                if not item.startswith("@"):
+                    invalid_no_at.append(item)
+                else:
+                    handle = item[1:]
+                    if re.match(r'^[a-zA-Z0-9._]{1,30}$', handle):
+                        valid_recipients.append(handle)
+                    else:
+                        invalid_chars.append(item)
+
+            if invalid_no_at:
+                recipient_has_error = True
+                st.error(f"⚠️ Recipient handles must start with '@' (e.g. @{invalid_no_at[0]}). Please add '@' before the username.")
+            elif invalid_chars:
+                recipient_has_error = True
+                st.error(f"⚠️ Invalid Instagram username format: '{invalid_chars[0]}'. Handles can only contain letters, numbers, dots, and underscores.")
+            elif valid_recipients:
+                recips_display = ", @".join(valid_recipients)
+                st.markdown(f"""
+                <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 8px 12px; margin-top: 4px; margin-bottom: 10px; width: 100%; box-sizing: border-box; word-break: break-word; overflow-wrap: anywhere;">
+                    <span style="color: #10B981; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;">Confirmed Recipient(s):</span>
+                    <span style="color: #F8FAFC; font-weight: 600; font-size: 0.88rem; margin-left: 4px;">@{recips_display}</span>
+                </div>
+                """, unsafe_allow_html=True)
 
         reel_source_mode = st.radio(
             "Reel Source Mode",
@@ -1246,8 +1299,8 @@ def render_reel_automation_tab():
             if st.button("Instant Start Now", type="primary", use_container_width=True, key="btn_start_reel_auto"):
                 if not reel_sid_in.strip():
                     st.error("Please enter a valid Instagram Session ID!")
-                elif not reel_target_in.strip():
-                    st.error("Please enter and confirm recipient username!")
+                elif recipient_has_error or not valid_recipients:
+                    st.error("Please enter valid recipient handle(s) starting with '@' (e.g. @username1)!")
                 elif not reel_urls_in.strip() and not auto_discover_cb:
                     st.error("Please enter at least 1 Reel URL OR select Auto-Discover mode!")
                 else:
@@ -1258,7 +1311,7 @@ def render_reel_automation_tab():
                         st.error(f"Session ID Verification Failed: {msg}. Please check your sessionid!")
                     else:
                         st.session_state.sid_verified_status = (True, v_user, msg)
-                        targets = [t.strip().lstrip("@") for t in reel_target_in.split(",") if t.strip()]
+                        targets = valid_recipients
                         urls = [u.strip() for u in reel_urls_in.split("\n") if u.strip()]
                         reel_eng.sessionid = reel_sid_in.strip()
                         reel_eng.start_automation(
@@ -1279,8 +1332,8 @@ def render_reel_automation_tab():
         if st.button("Save Offline Schedule", use_container_width=True, key="btn_save_bg_schedule"):
             if not reel_sid_in.strip():
                 st.error("Please enter a valid Instagram Session ID!")
-            elif not reel_target_in.strip():
-                st.error("Please enter and confirm recipient username!")
+            elif recipient_has_error or not valid_recipients:
+                st.error("Please enter valid recipient handle(s) starting with '@' (e.g. @username1)!")
             elif not reel_urls_in.strip() and not auto_discover_cb:
                 st.error("Please enter at least 1 Reel URL OR select Auto-Discover mode!")
             else:
@@ -1293,7 +1346,7 @@ def render_reel_automation_tab():
                     st.session_state.sid_verified_status = (True, v_user, msg)
                     task_id = add_scheduled_task(
                         sessionid=reel_sid_in.strip(),
-                        recipients=reel_target_in.strip(),
+                        recipients=",".join([f"@{r}" for r in valid_recipients]),
                         reel_urls=reel_urls_in.strip() if reel_urls_in.strip() else "AUTO_DISCOVER",
                         total_reels=int(total_reels_count),
                         start_time=start_time_val.strip(),
@@ -1302,6 +1355,7 @@ def render_reel_automation_tab():
                     daemon.start_daemon()
                     st.success(f"Verified Session ID for @{v_user or 'User'}! Task #{task_id} saved to Background Daemon.")
                     st.rerun()
+
 
     with c_btn3:
         if reel_eng.is_running:
