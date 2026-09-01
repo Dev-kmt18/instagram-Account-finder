@@ -104,6 +104,18 @@ def safe_launch_playwright_browser(p, headless: bool = True, log_func=None):
         raise e3
 
 
+def is_valid_reel_url(url: str) -> bool:
+    """Validate that a URL points to an actual single Reel post, not the generic reels feed."""
+    if not url:
+        return False
+    clean = url.split("?")[0].rstrip("/")
+    match = re.search(r'instagram\.com/(?:reel|reels|p)/([A-Za-z0-9_-]+)', clean)
+    if not match:
+        return False
+    shortcode = match.group(1).strip()
+    return len(shortcode) >= 5 and shortcode.lower() not in ["reels", "reel", "explore", "feed"]
+
+
 def parse_time_str(t_str: str) -> Tuple[int, int]:
     """Parse time string in 12-hour AM/PM format (e.g. '09:00 PM', '9 PM', '09:00PM') or 24-hour format (e.g. '21:00')."""
     if not t_str or not t_str.strip():
@@ -200,7 +212,8 @@ class ReelAutomationEngine:
     def _authed_session(self) -> requests.Session:
         """Create an authenticated HTTP session using sessionid cookie with full IG Web headers."""
         s = requests.Session()
-        clean_sid = urllib.parse.unquote(self.sessionid.strip().strip('"').strip("'"))
+        raw_sid = self.sessionid.strip().strip('"').strip("'")
+        clean_sid = urllib.parse.unquote(raw_sid)
         ds_user_id = clean_sid.split("%3A")[0] if "%3A" in clean_sid else clean_sid.split(":")[0]
         
         s.headers.update({
@@ -215,18 +228,18 @@ class ReelAutomationEngine:
         })
         
         csrf_token = uuid.uuid4().hex
-        for domain in [".instagram.com", "www.instagram.com", "instagram.com"]:
-            s.cookies.set("sessionid", clean_sid, domain=domain)
-            if ds_user_id:
-                s.cookies.set("ds_user_id", ds_user_id, domain=domain)
-            s.cookies.set("csrftoken", csrf_token, domain=domain)
+        # Set cookies cleanly on single domain to avoid CookieConflictError
+        s.cookies.set("sessionid", raw_sid, domain=".instagram.com", path="/")
+        if ds_user_id:
+            s.cookies.set("ds_user_id", ds_user_id, domain=".instagram.com", path="/")
+        s.cookies.set("csrftoken", csrf_token, domain=".instagram.com", path="/")
         
         s.headers["X-CSRFToken"] = csrf_token
 
         # Fetch real csrftoken from Instagram
         try:
             r = s.get("https://www.instagram.com/api/v1/accounts/current_user/?edit=true", allow_redirects=False, timeout=5)
-            real_csrf = s.cookies.get("csrftoken")
+            real_csrf = s.cookies.get("csrftoken", domain=".instagram.com")
             if real_csrf:
                 s.headers["X-CSRFToken"] = real_csrf
         except Exception:
@@ -301,10 +314,11 @@ class ReelAutomationEngine:
         """
         Automatically scroll Instagram Reels Feed using Playwright and discover random fresh Reel URLs.
         """
-        clean_sid = urllib.parse.unquote(self.sessionid.strip().strip('"').strip("'"))
+        raw_sid = self.sessionid.strip().strip('"').strip("'")
+        clean_sid = urllib.parse.unquote(raw_sid)
         ds_user_id = clean_sid.split("%3A")[0] if "%3A" in clean_sid else clean_sid.split(":")[0]
 
-        if not clean_sid or len(clean_sid) < 5:
+        if not raw_sid or len(raw_sid) < 5:
             self.log("❌ Cannot discover Reels: Session ID is empty or invalid.")
             return []
 
@@ -320,11 +334,11 @@ class ReelAutomationEngine:
                     viewport={"width": 1280, "height": 800}
                 )
                 context.add_cookies([
-                    {"name": "sessionid", "value": clean_sid, "domain": ".instagram.com", "path": "/"},
+                    {"name": "sessionid", "value": raw_sid, "domain": ".instagram.com", "path": "/"},
                     {"name": "ds_user_id", "value": ds_user_id, "domain": ".instagram.com", "path": "/"}
                 ])
                 page = context.new_page()
-                page.goto("https://www.instagram.com/reels/", timeout=35000, wait_until="domcontentloaded")
+                page.goto("https://www.instagram.com/reels/", timeout=40000, wait_until="domcontentloaded")
                 time.sleep(3)
 
                 for p_text in ["Not Now", "not now", "Save Info"]:
@@ -336,18 +350,21 @@ class ReelAutomationEngine:
                     except Exception:
                         pass
 
-                max_scrolls = max(count * 2, 8)
+                max_scrolls = max(count * 3, 15)
                 for _ in range(max_scrolls):
                     curr_u = page.url
-                    if "/reel/" in curr_u or "/p/" in curr_u or "/reels/" in curr_u:
-                        discovered_reels.add(curr_u)
+                    if is_valid_reel_url(curr_u):
+                        clean_url = curr_u.split("?")[0].rstrip("/") + "/"
+                        discovered_reels.add(clean_url)
 
-                    for a in page.locator("a[href*='/reel/'], a[href*='/p/']").all():
+                    for a in page.locator("a[href*='/reel/'], a[href*='/reels/'], a[href*='/p/']").all():
                         try:
                             href = a.get_attribute("href")
                             if href:
                                 full_link = "https://www.instagram.com" + href if href.startswith("/") else href
-                                discovered_reels.add(full_link.split("?")[0])
+                                clean_link = full_link.split("?")[0].rstrip("/") + "/"
+                                if is_valid_reel_url(clean_link):
+                                    discovered_reels.add(clean_link)
                         except Exception:
                             pass
 
@@ -429,9 +446,9 @@ class ReelAutomationEngine:
                     viewport={"width": 1280, "height": 800}
                 )
 
-                # Inject cookies into Playwright context
+                raw_sid = self.sessionid.strip().strip('"').strip("'")
                 cookies = [
-                    {"name": "sessionid", "value": clean_sid, "domain": ".instagram.com", "path": "/"},
+                    {"name": "sessionid", "value": raw_sid, "domain": ".instagram.com", "path": "/"},
                     {"name": "ds_user_id", "value": ds_user_id, "domain": ".instagram.com", "path": "/"}
                 ]
                 context.add_cookies(cookies)
