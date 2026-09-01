@@ -683,80 +683,161 @@ class ReelAutomationEngine:
             self.log(f"🎯 Target Recipients: {', '.join(recipients)}")
             
             nonlocal reel_urls
-            if auto_discover or not reel_urls:
-                self.log("🎲 Auto Discover Feed Mode enabled! Scrolling Instagram Reels feed for fresh random Reels...")
-                discovered = self.discover_random_reels_from_feed(count=self.total_reels)
-                if discovered:
-                    reel_urls = discovered
-                    self.total_reels = len(reel_urls)
-                else:
-                    self.log("⚠️ No Reels discovered from feed. Falling back to default URL list.")
+            raw_sid = self.sessionid.strip().strip('"').strip("'")
+            clean_sid = urllib.parse.unquote(raw_sid)
+            ds_user_id = clean_sid.split("%3A")[0] if "%3A" in clean_sid else clean_sid.split(":")[0]
 
-            self.total_reels = min(self.total_reels, len(reel_urls)) if reel_urls else self.total_reels
-            self.log(f"⏱ Schedule Window: {start_time_str} to {end_time_str} ({self.total_reels} Reels)")
+            playwright_mgr = None
+            persistent_browser = None
+            persistent_page = None
 
-
-            # Parse start and end time objects for today (12h AM/PM or 24h)
-            now = datetime.datetime.now()
             try:
-                sh, sm = parse_time_str(start_time_str)
-                eh, em = parse_time_str(end_time_str)
-                start_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
-                end_dt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
-                if end_dt <= start_dt:
-                    end_dt += datetime.timedelta(days=1)
-            except Exception:
-                start_dt = now
-                end_dt = now + datetime.timedelta(hours=2)
+                from playwright.sync_api import sync_playwright
+                playwright_mgr = sync_playwright().start()
+                persistent_browser = safe_launch_playwright_browser(playwright_mgr, headless=True, log_func=self.log)
+                ctx = persistent_browser.new_context(
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800}
+                )
+                ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+                ctx.add_cookies([
+                    {"name": "sessionid", "value": raw_sid, "domain": ".instagram.com", "path": "/"},
+                    {"name": "ds_user_id", "value": ds_user_id, "domain": ".instagram.com", "path": "/"}
+                ])
+                persistent_page = ctx.new_page()
+            except Exception as e_pw:
+                self.log(f"⚠️ Playwright persistent session notice: {e_pw}")
 
-            # Wait if start_dt is in future
-            if now < start_dt:
-                wait_sec = (start_dt - now).total_seconds()
-                self.log(f"⏳ Waiting {int(wait_sec)}s until scheduled start time ({start_time_str})...")
-                time.sleep(min(wait_sec, 5))
+            try:
+                if auto_discover or not reel_urls:
+                    self.log("🎲 Auto Discover Feed Mode enabled! Scrolling Instagram Reels feed for fresh random Reels...")
+                    if persistent_page:
+                        try:
+                            persistent_page.goto("https://www.instagram.com/reels/", timeout=40000, wait_until="domcontentloaded")
+                            time.sleep(3)
+                            for p_text in ["Not Now", "not now", "Save Info"]:
+                                try:
+                                    b = persistent_page.locator(f"button:has-text('{p_text}')").first
+                                    if b.is_visible(timeout=1500):
+                                        b.click()
+                                        time.sleep(1)
+                                except Exception:
+                                    pass
 
-            total_window_seconds = max(300, int((end_dt - datetime.datetime.now()).total_seconds()))
-            avg_interval = total_window_seconds / max(1, self.total_reels)
+                            disc = []
+                            for _ in range(max(self.total_reels * 2, 12)):
+                                curr_u = persistent_page.url
+                                if is_valid_reel_url(curr_u):
+                                    clean = curr_u.split("?")[0].rstrip("/") + "/"
+                                    if clean not in disc:
+                                        disc.append(clean)
+                                try:
+                                    hrefs = persistent_page.evaluate("""() => {
+                                        return Array.from(document.querySelectorAll("a[href*='/reel/'], a[href*='/reels/'], a[href*='/p/']"))
+                                            .map(el => el.href);
+                                    }""")
+                                    for fl in hrefs:
+                                        cl = fl.split("?")[0].rstrip("/") + "/"
+                                        if is_valid_reel_url(cl) and cl not in disc:
+                                            disc.append(cl)
+                                except Exception:
+                                    pass
 
-            for i in range(self.total_reels):
-                if not self.is_running:
-                    self.log("⏹ Automation stopped by user.")
-                    break
+                                if len(disc) >= self.total_reels:
+                                    break
+                                persistent_page.keyboard.press("ArrowDown")
+                                time.sleep(1.5)
 
-                while self.is_paused:
-                    self.log("⏸ Automation PAUSED...")
-                    time.sleep(2)
+                            if disc:
+                                reel_urls = disc
+                                self.total_reels = len(reel_urls)
+                        except Exception as e_disc:
+                            self.log(f"⚠️ In-session discovery note: {e_disc}")
 
-                # Select reel URL
-                reel_url = reel_urls[i % len(reel_urls)] if reel_urls else "https://www.instagram.com/reels/"
-                target_user = recipients[i % len(recipients)] if recipients else "target"
+                    if not reel_urls:
+                        discovered = self.discover_random_reels_from_feed(count=self.total_reels)
+                        if discovered:
+                            reel_urls = discovered
+                            self.total_reels = len(reel_urls)
+                        else:
+                            self.log("⚠️ No Reels discovered from feed. Falling back to default URL list.")
 
-                # Calculate next random delay with jitter (+/- 30%)
-                jitter = random.uniform(0.7, 1.3)
-                current_delay = max(10, avg_interval * jitter)
-                
-                self.next_run_timestamp = time.time() + current_delay
-                next_time_str = datetime.datetime.fromtimestamp(self.next_run_timestamp).strftime("%H:%M:%S")
+                self.total_reels = min(self.total_reels, len(reel_urls)) if reel_urls else self.total_reels
+                self.log(f"⏱ Schedule Window: {start_time_str} to {end_time_str} ({self.total_reels} Reels)")
 
-                self.log(f"📤 [{i+1}/{self.total_reels}] Sending reel to @{target_user}...")
-                success = self.send_direct_reel(target_user, reel_url)
-                if success:
-                    self.sent_count += 1
-                else:
-                    self.failed_count += 1
+                # Parse start and end time objects for today (12h AM/PM or 24h)
+                now = datetime.datetime.now()
+                try:
+                    sh, sm = parse_time_str(start_time_str)
+                    eh, em = parse_time_str(end_time_str)
+                    start_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+                    end_dt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+                    if end_dt <= start_dt:
+                        end_dt += datetime.timedelta(days=1)
+                except Exception:
+                    start_dt = now
+                    end_dt = now + datetime.timedelta(hours=2)
 
-                if i < self.total_reels - 1 and self.is_running:
-                    self.log(f"🕒 Next Reel scheduled at {next_time_str} (in {int(current_delay)}s)...")
-                    # Sleep in small ticks to respond quickly to pause/stop signals
-                    start_sleep = time.time()
-                    while (time.time() - start_sleep) < current_delay:
-                        if not self.is_running:
-                            break
-                        time.sleep(1)
+                # Wait if start_dt is in future
+                if now < start_dt:
+                    wait_sec = (start_dt - now).total_seconds()
+                    self.log(f"⏳ Waiting {int(wait_sec)}s until scheduled start time ({start_time_str})...")
+                    time.sleep(min(wait_sec, 5))
 
-            self.status = "COMPLETED"
-            self.is_running = False
-            self.log(f"🎉 Reel Automation Finished! Sent: {self.sent_count} | Failed: {self.failed_count}")
+                total_window_seconds = max(300, int((end_dt - datetime.datetime.now()).total_seconds()))
+                avg_interval = total_window_seconds / max(1, self.total_reels)
+
+                for i in range(self.total_reels):
+                    if not self.is_running:
+                        self.log("⏹ Automation stopped by user.")
+                        break
+
+                    while self.is_paused:
+                        self.log("⏸ Automation PAUSED...")
+                        time.sleep(2)
+
+                    # Select reel URL
+                    reel_url = reel_urls[i % len(reel_urls)] if reel_urls else "https://www.instagram.com/reels/"
+                    target_user = recipients[i % len(recipients)] if recipients else "target"
+
+                    # Calculate next random delay with jitter (+/- 30%)
+                    jitter = random.uniform(0.7, 1.3)
+                    current_delay = max(10, avg_interval * jitter)
+                    
+                    self.next_run_timestamp = time.time() + current_delay
+                    next_time_str = datetime.datetime.fromtimestamp(self.next_run_timestamp).strftime("%H:%M:%S")
+
+                    self.log(f"📤 [{i+1}/{self.total_reels}] Sending reel to @{target_user}...")
+                    success = self.send_direct_reel(target_user, reel_url, page=persistent_page)
+                    if success:
+                        self.sent_count += 1
+                    else:
+                        self.failed_count += 1
+
+                    if i < self.total_reels - 1 and self.is_running:
+                        self.log(f"🕒 Next Reel scheduled at {next_time_str} (in {int(current_delay)}s)...")
+                        # Sleep in small ticks to respond quickly to pause/stop signals
+                        start_sleep = time.time()
+                        while (time.time() - start_sleep) < current_delay:
+                            if not self.is_running:
+                                break
+                            time.sleep(1)
+
+                self.status = "COMPLETED"
+                self.is_running = False
+                self.log(f"🎉 Reel Automation Finished! Sent: {self.sent_count} | Failed: {self.failed_count}")
+
+            finally:
+                if persistent_browser:
+                    try:
+                        persistent_browser.close()
+                    except Exception:
+                        pass
+                if playwright_mgr:
+                    try:
+                        playwright_mgr.stop()
+                    except Exception:
+                        pass
 
         self.thread = threading.Thread(target=run_loop, daemon=True)
         self.thread.start()
