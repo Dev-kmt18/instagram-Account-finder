@@ -1,3 +1,6 @@
+import os
+import sys
+import subprocess
 import time
 import random
 import threading
@@ -9,6 +12,97 @@ from typing import List, Dict, Optional, Tuple
 from insta_bot.database import add_reel_log, is_reel_already_sent
 
 import re
+
+_PLAYWRIGHT_READY = False
+
+def ensure_playwright_ready(log_func=None):
+    """
+    Ensure Playwright Chromium browser is installed and ready in the environment.
+    Runs asynchronously in background or synchronously as needed.
+    """
+    global _PLAYWRIGHT_READY
+    if _PLAYWRIGHT_READY:
+        return
+        
+    def _install_worker():
+        global _PLAYWRIGHT_READY
+        try:
+            res = subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+            if res.returncode == 0:
+                _PLAYWRIGHT_READY = True
+                if log_func:
+                    log_func("✅ Playwright Chromium browser verified & ready.")
+        except Exception as e:
+            if log_func:
+                log_func(f"⚠️ Playwright background check note: {e}")
+
+    t = threading.Thread(target=_install_worker, daemon=True)
+    t.start()
+
+
+def safe_launch_playwright_browser(p, headless: bool = True, log_func=None):
+    """
+    Safely launch Playwright Chromium browser across environments (Streamlit Community Cloud, Linux, Mac, Windows).
+    1. Attempts standard launch.
+    2. If missing, attempts to use system-installed Chromium (/usr/bin/chromium from packages.txt).
+    3. If still missing, automatically installs Chromium via `python -m playwright install chromium` and launches.
+    """
+    launch_args = [
+        "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu"
+    ]
+    
+    # Attempt 1: Standard launch
+    try:
+        return p.chromium.launch(headless=headless, args=launch_args)
+    except Exception as e1:
+        err_str = str(e1)
+        if log_func:
+            log_func(f"⚠️ Standard browser launch notice: {err_str[:110]}... Attempting auto-recovery...")
+
+    # Attempt 2: Use system chromium installed via packages.txt
+    system_paths = [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable"
+    ]
+    for sp in system_paths:
+        if os.path.exists(sp):
+            try:
+                if log_func:
+                    log_func(f"🌐 Using system installed Chromium at {sp}...")
+                return p.chromium.launch(executable_path=sp, headless=headless, args=launch_args)
+            except Exception as e_sys:
+                if log_func:
+                    log_func(f"⚠️ System Chromium launch note: {e_sys}")
+
+    # Attempt 3: Auto-install browser binaries on server (e.g. Streamlit Community Cloud)
+    if log_func:
+        log_func("📦 Auto-installing Playwright Chromium binaries on server... (Please wait ~20-30s)")
+    try:
+        run_res = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            capture_output=True,
+            text=True,
+            timeout=180
+        )
+        if run_res.returncode == 0 and log_func:
+            log_func("✅ Playwright Chromium binaries installed successfully!")
+        
+        return p.chromium.launch(headless=headless, args=launch_args)
+    except Exception as e3:
+        if log_func:
+            log_func(f"❌ Failed to auto-install Playwright browser: {e3}")
+        raise e3
+
 
 def parse_time_str(t_str: str) -> Tuple[int, int]:
     """Parse time string in 12-hour AM/PM format (e.g. '09:00 PM', '9 PM', '09:00PM') or 24-hour format (e.g. '21:00')."""
@@ -141,17 +235,66 @@ class ReelAutomationEngine:
         return s
 
     def resolve_user_id(self, username: str) -> Optional[str]:
-        """Resolve numeric Instagram User ID for a target username."""
+        """
+        Resolve numeric Instagram User ID for a target username with multiple resilient fallbacks:
+        1. Web Profile Info endpoint
+        2. Topsearch / Search API endpoint
+        3. User lookup / search endpoint
+        4. Profile JSON endpoint (__a=1)
+        """
         clean_username = username.strip().lstrip("@")
         s = self._authed_session()
+
+        # Method 1: Web profile info
         try:
-            res = s.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_username}", allow_redirects=False, timeout=10)
+            res = s.get(f"https://www.instagram.com/api/v1/users/web_profile_info/?username={clean_username}", allow_redirects=False, timeout=8)
             if res.status_code == 200:
                 uid = res.json().get("data", {}).get("user", {}).get("id")
                 if uid:
                     return str(uid)
         except Exception as e:
-            self.log(f"⚠️ Resolution note for @{clean_username}: {e}")
+            self.log(f"⚠️ Resolution method 1 notice for @{clean_username}: {e}")
+
+        # Method 2: Instagram Topsearch API
+        try:
+            res2 = s.get(f"https://www.instagram.com/web/search/topsearch/?context=blended&query={clean_username}&rank_token=0.5", timeout=8)
+            if res2.status_code == 200:
+                for item in res2.json().get("users", []):
+                    u = item.get("user", {})
+                    if u.get("username", "").lower() == clean_username.lower():
+                        uid = u.get("pk") or u.get("id")
+                        if uid:
+                            return str(uid)
+        except Exception as e:
+            self.log(f"⚠️ Resolution method 2 notice for @{clean_username}: {e}")
+
+        # Method 3: User search endpoint
+        try:
+            res3 = s.get(f"https://www.instagram.com/api/v1/users/search/?q={clean_username}&count=10", timeout=8)
+            if res3.status_code == 200:
+                for u in res3.json().get("users", []):
+                    if u.get("username", "").lower() == clean_username.lower():
+                        uid = u.get("pk") or u.get("id")
+                        if uid:
+                            return str(uid)
+        except Exception as e:
+            self.log(f"⚠️ Resolution method 3 notice for @{clean_username}: {e}")
+
+        # Method 4: Public profile JSON (__a=1)
+        try:
+            res4 = s.get(f"https://www.instagram.com/{clean_username}/?__a=1&__d=dis", timeout=8)
+            if res4.status_code == 200:
+                data = res4.json()
+                uid = (
+                    data.get("graphql", {}).get("user", {}).get("id") or
+                    data.get("user", {}).get("id") or
+                    data.get("user", {}).get("pk")
+                )
+                if uid:
+                    return str(uid)
+        except Exception as e:
+            self.log(f"⚠️ Resolution method 4 notice for @{clean_username}: {e}")
+
         return None
 
     def discover_random_reels_from_feed(self, count: int = 5, headless: bool = True) -> List[str]:
@@ -171,10 +314,7 @@ class ReelAutomationEngine:
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=headless,
-                    args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
-                )
+                browser = safe_launch_playwright_browser(p, headless=headless, log_func=self.log)
                 context = browser.new_context(
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     viewport={"width": 1280, "height": 800}
@@ -283,14 +423,7 @@ class ReelAutomationEngine:
             self.log(f"🌐 Launching Playwright Chromium Browser for @{clean_username} (Headless: {headless})...")
             
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=headless,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage"
-                    ]
-                )
+                browser = safe_launch_playwright_browser(p, headless=headless, log_func=self.log)
                 context = browser.new_context(
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     viewport={"width": 1280, "height": 800}

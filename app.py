@@ -14,7 +14,7 @@ from insta_bot.database import (
     add_scheduled_task, get_all_scheduled_tasks, delete_scheduled_task
 )
 from insta_bot.scraper import InstagramAgentEngine
-from insta_bot.reel_bot import ReelAutomationEngine
+from insta_bot.reel_bot import ReelAutomationEngine, ensure_playwright_ready
 from insta_bot.scheduler_daemon import get_daemon_instance
 from insta_bot.config import MIN_DELAY_PER_PROFILE, MAX_DELAY_PER_PROFILE
 
@@ -27,6 +27,9 @@ st.set_page_config(
 
 # Initialize Database (WAL mode & auto-migrations)
 init_db()
+
+# Warmup / Ensure Playwright browser binaries in background
+ensure_playwright_ready()
 
 # Custom Styling (Pure Dark Theme, Zero Gap Google Sheets Data Grid Aesthetics & Clean Enterprise UI)
 st.markdown("""
