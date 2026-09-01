@@ -105,15 +105,15 @@ def safe_launch_playwright_browser(p, headless: bool = True, log_func=None):
 
 
 def is_valid_reel_url(url: str) -> bool:
-    """Validate that a URL points to an actual single Reel post, not the generic reels feed."""
-    if not url:
+    """Validate that a URL points to an actual single Reel post, not the generic reels feed, audio, or stories page."""
+    if not url or "/audio/" in url or "/tagged/" in url or "/stories/" in url:
         return False
     clean = url.split("?")[0].rstrip("/")
     match = re.search(r'instagram\.com/(?:reel|reels|p)/([A-Za-z0-9_-]+)', clean)
     if not match:
         return False
     shortcode = match.group(1).strip()
-    return len(shortcode) >= 5 and shortcode.lower() not in ["reels", "reel", "explore", "feed"]
+    return len(shortcode) >= 5 and shortcode.lower() not in ["reels", "reel", "explore", "feed", "audio", "stories"]
 
 
 def parse_time_str(t_str: str) -> Tuple[int, int]:
