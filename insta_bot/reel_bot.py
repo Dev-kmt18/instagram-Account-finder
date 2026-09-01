@@ -357,16 +357,17 @@ class ReelAutomationEngine:
                         clean_url = curr_u.split("?")[0].rstrip("/") + "/"
                         discovered_reels.add(clean_url)
 
-                    for a in page.locator("a[href*='/reel/'], a[href*='/reels/'], a[href*='/p/']").all():
-                        try:
-                            href = a.get_attribute("href")
-                            if href:
-                                full_link = "https://www.instagram.com" + href if href.startswith("/") else href
-                                clean_link = full_link.split("?")[0].rstrip("/") + "/"
-                                if is_valid_reel_url(clean_link):
-                                    discovered_reels.add(clean_link)
-                        except Exception:
-                            pass
+                    try:
+                        hrefs = page.evaluate("""() => {
+                            return Array.from(document.querySelectorAll("a[href*='/reel/'], a[href*='/reels/'], a[href*='/p/']"))
+                                .map(el => el.href);
+                        }""")
+                        for full_link in hrefs:
+                            clean_link = full_link.split("?")[0].rstrip("/") + "/"
+                            if is_valid_reel_url(clean_link):
+                                discovered_reels.add(clean_link)
+                    except Exception:
+                        pass
 
                     if len(discovered_reels) >= count:
                         break
