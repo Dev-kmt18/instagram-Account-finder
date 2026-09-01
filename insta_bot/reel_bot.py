@@ -383,11 +383,11 @@ class ReelAutomationEngine:
         self.log(f"🎉 Discovered {len(result_list)} random Reels from Instagram feed.")
         return result_list
 
-    def send_direct_reel(self, recipient_username: str, reel_url: str, use_playwright: bool = True, headless: bool = True, force_resend: bool = False, max_retries: int = 2) -> bool:
+    def send_direct_reel(self, recipient_username: str, reel_url: str, use_playwright: bool = True, headless: bool = True, force_resend: bool = False, max_retries: int = 2, page = None) -> bool:
         """
         Send a Reel link via Instagram Direct Message with automatic retry on failure.
         Prevents sending duplicate Reels to the same user.
-        Uses Playwright real browser automation by default.
+        Uses Playwright real browser automation by default with persistent page reuse support.
         """
         if not force_resend and is_reel_already_sent(recipient_username, reel_url):
             msg = f"Reel ({reel_url}) was ALREADY SENT to @{recipient_username} previously. Skipping duplicate!"
@@ -403,7 +403,7 @@ class ReelAutomationEngine:
             success = False
             if use_playwright:
                 try:
-                    success = self.send_direct_reel_playwright(recipient_username, reel_url, headless=headless)
+                    success = self.send_direct_reel_playwright(recipient_username, reel_url, headless=headless, page=page)
                 except Exception as err:
                     self.log(f"⚠️ Playwright engine error (Attempt {attempt}): {err}. Falling back to HTTP API...")
                     success = self._send_direct_reel_http(recipient_username, reel_url)
@@ -419,11 +419,12 @@ class ReelAutomationEngine:
 
 
 
-    def send_direct_reel_playwright(self, recipient_username: str, reel_url: str, headless: bool = True) -> bool:
+    def send_direct_reel_playwright(self, recipient_username: str, reel_url: str, headless: bool = True, page = None) -> bool:
         """
         Send a Reel video card via Instagram Direct Message using Playwright Browser Automation.
         Navigates directly to the Reel page, clicks native Share button, selects recipient, and sends.
-        Injects sessionid cookie into a real Chromium browser context to bypass anti-bot logout detection.
+        Injects sessionid cookie into a real Chromium browser context with anti-detect stealth scripts.
+        Reuses existing page when available to maintain continuous human-like browsing session.
         """
         clean_username = recipient_username.strip().lstrip("@")
         clean_sid = urllib.parse.unquote(self.sessionid.strip().strip('"').strip("'"))
@@ -435,6 +436,121 @@ class ReelAutomationEngine:
             add_reel_log(recipient_username, reel_url, "FAILED", msg)
             return False
 
+        def _do_send_on_page(target_page) -> bool:
+            # Step 1: Open Reel URL directly
+            self.log(f"🔗 Opening Reel URL: {reel_url}...")
+            target_page.goto(reel_url, timeout=40000, wait_until="domcontentloaded")
+            time.sleep(3)
+
+            # Check if redirected to login page
+            if "/accounts/login/" in target_page.url:
+                msg = "Session ID cookie is invalid, expired, or logged out on Instagram."
+                self.log(f"❌ Playwright Error: {msg}")
+                add_reel_log(recipient_username, reel_url, "FAILED", msg)
+                return False
+
+            # Handle popups ("Not Now", "Save Info")
+            for popup_text in ["Not Now", "not now", "Save Info"]:
+                try:
+                    btn = target_page.locator(f"button:has-text('{popup_text}'), div[role='button']:has-text('{popup_text}')").first
+                    if btn.is_visible(timeout=1500):
+                        btn.click()
+                        time.sleep(1)
+                except Exception:
+                    pass
+
+            # Step 2: Native Reel Share button click
+            self.log("📲 Clicking native Reel Share button...")
+            share_svg = target_page.locator("svg[aria-label='Share'], svg[aria-label='Share Post']").first
+            share_success = False
+
+            if share_svg.is_visible(timeout=5000):
+                share_svg.click()
+                time.sleep(2.5)
+
+                search_input = target_page.locator("input[name='queryBox'], input[placeholder*='Search'], input[type='text']").first
+                if search_input.is_visible(timeout=5000):
+                    self.log(f"🔍 Searching for recipient @{clean_username} in Share dialog...")
+                    search_input.fill(clean_username)
+                    time.sleep(2)
+
+                    user_row = target_page.locator(f"span:has-text('{clean_username}'), div:has-text('{clean_username}')").last
+                    if user_row.is_visible(timeout=5000):
+                        user_row.click()
+                        time.sleep(1.5)
+
+                        send_btn = target_page.locator("div[role='button']:has-text('Send'), button:has-text('Send')").first
+                        if send_btn.is_visible(timeout=5000):
+                            send_btn.click()
+                            time.sleep(4)
+                            share_success = True
+                            msg = f"Successfully shared Reel video card with @{clean_username}!"
+                            self.log(f"✅ {msg}: {reel_url}")
+                            add_reel_log(recipient_username, reel_url, "SENT", msg)
+                            return True
+
+            # Fallback Step 3: DM text composer fallback if native Share button modal was skipped
+            if not share_success:
+                self.log("⚠️ Falling back to Direct Message compose box...")
+                target_page.goto("https://www.instagram.com/direct/new/", timeout=30000, wait_until="domcontentloaded")
+                time.sleep(3)
+
+                search_box = target_page.locator("input[name='queryBox'], input[placeholder*='Search']").first
+                if search_box.is_visible(timeout=5000):
+                    search_box.fill(clean_username)
+                    time.sleep(2)
+                    
+                    user_item = target_page.locator(f"span:has-text('{clean_username}'), div:has-text('{clean_username}')").last
+                    if user_item.is_visible(timeout=5000):
+                        user_item.click()
+                        time.sleep(1)
+
+                        next_btn = target_page.locator("div[role='button']:has-text('Next'), div[role='button']:has-text('Chat'), button:has-text('Next'), button:has-text('Chat')").first
+                        if next_btn.is_visible(timeout=3000):
+                            next_btn.click()
+                            time.sleep(3)
+
+                target_box = None
+                selectors = [
+                    "p[contenteditable='true']",
+                    "div[contenteditable='true']",
+                    "div[role='textbox']",
+                    "div[aria-label*='Message']",
+                    "textarea[placeholder*='Message']"
+                ]
+
+                for sel in selectors:
+                    try:
+                        box = target_page.wait_for_selector(sel, timeout=5000)
+                        if box and box.is_visible():
+                            target_box = box
+                            break
+                    except Exception:
+                        pass
+
+                if not target_box:
+                    msg = f"Could not locate DM chat box for @{clean_username} on URL: {target_page.url}"
+                    self.log(f"❌ {msg}")
+                    add_reel_log(recipient_username, reel_url, "FAILED", msg)
+                    return False
+
+                target_box.click()
+                time.sleep(0.5)
+                target_box.fill(reel_url.strip())
+                time.sleep(1)
+                target_page.keyboard.press("Enter")
+                time.sleep(4)
+
+                msg = f"Successfully sent Reel to @{clean_username} via DM compose fallback!"
+                self.log(f"✅ {msg}: {reel_url}")
+                add_reel_log(recipient_username, reel_url, "SENT", msg)
+                return True
+
+            return False
+
+        if page is not None:
+            return _do_send_on_page(page)
+
         try:
             from playwright.sync_api import sync_playwright
             self.log(f"🌐 Launching Playwright Chromium Browser for @{clean_username} (Headless: {headless})...")
@@ -445,6 +561,7 @@ class ReelAutomationEngine:
                     user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     viewport={"width": 1280, "height": 800}
                 )
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
                 raw_sid = self.sessionid.strip().strip('"').strip("'")
                 cookies = [
@@ -453,123 +570,10 @@ class ReelAutomationEngine:
                 ]
                 context.add_cookies(cookies)
 
-                page = context.new_page()
-
-                # Step 1: Open Reel URL directly
-                self.log(f"🔗 Opening Reel URL: {reel_url}...")
-                page.goto(reel_url, timeout=35000, wait_until="domcontentloaded")
-                time.sleep(3)
-
-                # Check if redirected to login page
-                if "/accounts/login/" in page.url:
-                    msg = "Session ID cookie is invalid, expired, or logged out on Instagram."
-                    self.log(f"❌ Playwright Error: {msg}")
-                    add_reel_log(recipient_username, reel_url, "FAILED", msg)
-                    browser.close()
-                    return False
-
-                # Handle popups ("Not Now", "Save Info")
-                for popup_text in ["Not Now", "not now", "Save Info"]:
-                    try:
-                        btn = page.locator(f"button:has-text('{popup_text}'), div[role='button']:has-text('{popup_text}')").first
-                        if btn.is_visible(timeout=1500):
-                            btn.click()
-                            time.sleep(1)
-                    except Exception:
-                        pass
-
-                # Step 2: Native Reel Share button click
-                self.log("📲 Clicking native Reel Share button...")
-                share_svg = page.locator("svg[aria-label='Share'], svg[aria-label='Share Post']").first
-                share_success = False
-
-                if share_svg.is_visible(timeout=5000):
-                    share_svg.click()
-                    time.sleep(2.5)
-
-                    search_input = page.locator("input[name='queryBox'], input[placeholder*='Search'], input[type='text']").first
-                    if search_input.is_visible(timeout=5000):
-                        self.log(f"🔍 Searching for recipient @{clean_username} in Share dialog...")
-                        search_input.fill(clean_username)
-                        time.sleep(2)
-
-                        user_row = page.locator(f"span:has-text('{clean_username}'), div:has-text('{clean_username}')").last
-                        if user_row.is_visible(timeout=5000):
-                            user_row.click()
-                            time.sleep(1.5)
-
-                            send_btn = page.locator("div[role='button']:has-text('Send'), button:has-text('Send')").first
-                            if send_btn.is_visible(timeout=5000):
-                                send_btn.click()
-                                time.sleep(4)
-                                share_success = True
-                                msg = f"Successfully shared Reel video card with @{clean_username}!"
-                                self.log(f"✅ {msg}: {reel_url}")
-                                add_reel_log(recipient_username, reel_url, "SENT", msg)
-
-                # Fallback Step 3: DM text composer fallback if native Share button modal was skipped
-                if not share_success:
-                    self.log("⚠️ Falling back to Direct Message compose box...")
-                    page.goto("https://www.instagram.com/direct/new/", timeout=30000, wait_until="domcontentloaded")
-                    time.sleep(3)
-
-                    search_box = page.locator("input[name='queryBox'], input[placeholder*='Search']").first
-                    if search_box.is_visible(timeout=5000):
-                        search_box.fill(clean_username)
-                        time.sleep(2)
-                        
-                        user_item = page.locator(f"span:has-text('{clean_username}'), div:has-text('{clean_username}')").last
-                        if user_item.is_visible(timeout=5000):
-                            user_item.click()
-                            time.sleep(1)
-
-                            next_btn = page.locator("div[role='button']:has-text('Next'), div[role='button']:has-text('Chat'), button:has-text('Next'), button:has-text('Chat')").first
-                            if next_btn.is_visible(timeout=3000):
-                                next_btn.click()
-                                time.sleep(3)
-
-                    target_box = None
-                    selectors = [
-                        "p[contenteditable='true']",
-                        "div[contenteditable='true']",
-                        "div[role='textbox']",
-                        "div[aria-label*='Message']",
-                        "textarea[placeholder*='Message']"
-                    ]
-
-                    for sel in selectors:
-                        try:
-                            box = page.wait_for_selector(sel, timeout=5000)
-                            if box and box.is_visible():
-                                target_box = box
-                                break
-                        except Exception:
-                            pass
-
-                    if not target_box:
-                        msg = f"Could not locate DM chat box for @{clean_username} on URL: {page.url}"
-                        self.log(f"❌ {msg}")
-                        add_reel_log(recipient_username, reel_url, "FAILED", msg)
-                        browser.close()
-                        return False
-
-                    target_box.click()
-                    time.sleep(0.5)
-                    target_box.fill(reel_url.strip())
-                    time.sleep(1)
-                    page.keyboard.press("Enter")
-                    time.sleep(4)
-
-                    msg = f"Successfully sent Reel to @{clean_username} via DM compose fallback!"
-                    self.log(f"✅ {msg}: {reel_url}")
-                    add_reel_log(recipient_username, reel_url, "SENT", msg)
-
+                single_page = context.new_page()
+                res = _do_send_on_page(single_page)
                 browser.close()
-                return True
-
-                add_reel_log(recipient_username, reel_url, "SENT", msg)
-                browser.close()
-                return True
+                return res
 
         except Exception as err:
             self.log(f"⚠️ Playwright automation note for @{clean_username}: {err}")
