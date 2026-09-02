@@ -18,6 +18,10 @@ from insta_bot.reel_bot import ReelAutomationEngine, ensure_playwright_ready
 from insta_bot.scheduler_daemon import get_daemon_instance
 from insta_bot.config import MIN_DELAY_PER_PROFILE, MAX_DELAY_PER_PROFILE
 
+# Tab Navigation Identifiers
+TAB_LEADS = "Account Finder & Lead Classifier"
+TAB_REELS = "Reel Automation Bot"
+
 # Page Configuration
 st.set_page_config(
     page_title="Instagram Lead Finder & Classifier",
@@ -369,9 +373,42 @@ st.markdown("""
         background-color: var(--bg-surface-elevated) !important;
         color: var(--text-primary) !important;
         border: 1px solid var(--border-subtle) !important;
-        border-radius: 6px !important;
         font-weight: 500 !important;
+        border-radius: 6px !important;
         transition: all 0.15s ease !important;
+    }
+
+    /* Main Navigation Segmented Control Bar */
+    div[data-testid="stSegmentedControl"] {
+        background-color: #0D0E12 !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+        margin-bottom: 1.25rem !important;
+        display: inline-flex !important;
+        gap: 6px !important;
+    }
+    div[data-testid="stSegmentedControl"] button {
+        border-radius: 6px !important;
+        border: none !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+        padding: 8px 22px !important;
+        color: #94A3B8 !important;
+        background: transparent !important;
+        transition: all 0.2s ease !important;
+    }
+    div[data-testid="stSegmentedControl"] button:hover {
+        color: #F8FAFC !important;
+        background-color: rgba(255, 255, 255, 0.06) !important;
+    }
+    div[data-testid="stSegmentedControl"] button[aria-checked="true"],
+    div[data-testid="stSegmentedControl"] button[aria-selected="true"],
+    div[data-testid="stSegmentedControl"] button[data-checked="true"] {
+        background: linear-gradient(135deg, #8B0000 0%, #A50000 100%) !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 2px 10px rgba(139, 0, 0, 0.45) !important;
     }
     div.stButton > button[kind="secondary"]:hover {
         border-color: var(--border-hover) !important;
@@ -1180,6 +1217,7 @@ def render_reel_automation_tab():
         reel_sid_in = st.text_input("Instagram Session ID Cookie", value=saved_sid, type="password", placeholder="Paste Instagram sessionid cookie...", key="reel_sid_input", help="Authenticated Session ID cookie from Instagram.")
         
         if st.button("Verify Session ID", use_container_width=True, key="btn_verify_sid_tab2"):
+            st.session_state["main_nav_tab"] = TAB_REELS
             if reel_sid_in.strip():
                 with st.spinner("Verifying Session ID with Instagram..."):
                     is_valid, v_user, msg = st.session_state.reel_engine.verify_sessionid(reel_sid_in.strip())
@@ -1319,6 +1357,7 @@ def render_reel_automation_tab():
                         st.error(f"Session ID Verification Failed: {msg}. Please check your sessionid!")
                     else:
                         st.session_state.sid_verified_status = (True, v_user, msg)
+                        st.session_state["main_nav_tab"] = TAB_REELS
                         targets = valid_recipients
                         urls = [u.strip() for u in reel_urls_in.split("\n") if u.strip()]
                         reel_eng.sessionid = reel_sid_in.strip()
@@ -1352,6 +1391,7 @@ def render_reel_automation_tab():
                     st.error(f"Session ID Verification Failed: {msg}. Please check your sessionid!")
                 else:
                     st.session_state.sid_verified_status = (True, v_user, msg)
+                    st.session_state["main_nav_tab"] = TAB_REELS
                     task_id = add_scheduled_task(
                         sessionid=reel_sid_in.strip(),
                         recipients=",".join([f"@{r}" for r in valid_recipients]),
@@ -1441,12 +1481,22 @@ def render_reel_automation_tab():
         else:
             st.info("No offline background schedules found. Fill the form above and click 'Save Offline Schedule'!")
 
-# Main render tabs execution
-main_tab1, main_tab2 = st.tabs(["Account Finder & Lead Classifier", "Reel Automation Bot"])
+# Main render execution with persistent navigation state
+if "main_nav_tab" not in st.session_state:
+    st.session_state.main_nav_tab = TAB_LEADS
 
-with main_tab1:
+selected_tab = st.segmented_control(
+    "Main Navigation",
+    options=[TAB_LEADS, TAB_REELS],
+    default=st.session_state.main_nav_tab,
+    key="main_nav_tab",
+    label_visibility="collapsed"
+)
+
+current_view = selected_tab or st.session_state.get("main_nav_tab", TAB_LEADS)
+
+if current_view == TAB_LEADS:
     render_account_finder_tab()
-
-with main_tab2:
+else:
     render_reel_automation_tab()
 
