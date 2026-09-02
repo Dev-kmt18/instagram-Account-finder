@@ -1203,8 +1203,13 @@ def render_reel_automation_tab():
             else:
                 st.error(f"Session Error: {v_msg}")
 
-        reel_target_in = st.text_input("Target Recipient Username(s)", value="", placeholder="e.g. @username1, @username2", key="reel_target_input", help="Target Instagram handle(s) starting with @ separated by commas.")
-        st.markdown("<div style='font-size:0.72rem; color:#64748B; margin-top:-8px; margin-bottom:6px;'>Format: Every recipient handle must start with @ (e.g. @pawan_kmt18, @its_devkinandan_108)</div>", unsafe_allow_html=True)
+        reel_target_in = st.text_input(
+            "Target Recipient Username(s)",
+            value="",
+            placeholder="e.g. @username1, @username2",
+            key="reel_target_input",
+            help="Format: Every recipient handle must start with @ (e.g. @username1, @username2). Separate multiple usernames with commas."
+        )
 
         valid_recipients = []
         recipient_has_error = False
